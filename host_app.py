@@ -15,6 +15,32 @@ from components.daily_performance import show_daily_performance
 st.set_page_config(page_title="🚚 Truck Turnaround Live Dashboard — HOSTED", layout="wide")
 st.title("🚚 Truck Turnaround Live Dashboard — HOSTED")
 
+def safe_rerun():
+    """
+    Try to rerun the Streamlit script in a robust way across Streamlit versions/environments:
+      1. Preferred: st.experimental_rerun()
+      2. Fallback: HTML meta refresh (reload page)
+      3. Final fallback: st.stop() (stops execution — user can refresh)
+    """
+    # First attempt the official API (works in most environments)
+    try:
+        return st.experimental_rerun()
+    except Exception as e:
+        # If attribute missing or other runtime error, fall back gracefully
+        # 1) Try meta refresh (forces browser to reload page)
+        try:
+            st.markdown("<meta http-equiv='refresh' content='0'>", unsafe_allow_html=True)
+            return
+        except Exception:
+            pass
+        # 2) Last resort: stop execution (user can manually refresh page)
+        try:
+            st.stop()
+            return
+        except Exception:
+            # give up silently (nothing else we can do)
+            return
+
 raw_dfs = load_all_sheets()
 default_date = get_current_date_from_sheets(raw_dfs)
 sb = render_sidebar(default_date, REFRESH_INTERVAL_SECONDS)
@@ -25,8 +51,19 @@ if sb["auto_refresh"]:
 
 # Manual refresh
 if sb["manual_refresh"]:
-    st.cache_data.clear()
-    st.experimental_rerun()
+    # clear cache(s)
+    try:
+        st.cache_data.clear()
+    except Exception:
+        try:
+            # fallback for older Streamlit versions
+            st.caching.clear_cache()
+        except Exception:
+            pass
+
+    # robustly try to rerun / reload
+    safe_rerun()
+
 
 dfs = clean_sheet_dfs(raw_dfs)
 

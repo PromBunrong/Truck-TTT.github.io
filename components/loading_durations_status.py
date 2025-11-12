@@ -88,4 +88,4 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
     display_cols = [c for c in display_cols if c in df_kpi.columns]
 
     st.subheader("Loading Durations Status")
-    st.dataframe(df_kpi[display_cols].sort_values(["Product_Group", "Date", "Truck_Plate_Number"]))
+    st.dataframe(df_kpi[display_cols].reset_index(drop=True).sort_values(["Product_Group", "Date", "Truck_Plate_Number"]).reset_index(drop=True), hide_index=True)

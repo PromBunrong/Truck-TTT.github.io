@@ -58,4 +58,4 @@ def show_current_waiting(df_security, df_status, df_driver, product_filter=None,
     if waiting.empty:
         st.info("No current waiting trucks for the selected filters.")
     else:
-        st.dataframe(waiting.sort_values("Waiting_min", ascending=False))
+        st.dataframe(waiting.sort_values("Waiting_min", ascending=False).reset_index(drop=True), hide_index=True)

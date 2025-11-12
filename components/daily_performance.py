@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 from data.metrics import compute_per_truck_metrics
 
+
 def show_daily_performance(dfs, selected_date, product_selected, upload_type):
     """
     Corrected: properly merges Coming_to_load_or_Unload and Total_Weight_MT
@@ -77,4 +78,5 @@ def show_daily_performance(dfs, selected_date, product_selected, upload_type):
     else:
         # reorder columns for clearer view
         cols = ["Product_Group", "Coming_to_load_or_Unload", "Total_truck", "Total_weight_MT", "Total_min", "Loading_Rate"]
-        st.dataframe(agg[cols].sort_values(["Product_Group", "Coming_to_load_or_Unload"]))
+        st.dataframe(agg[cols].sort_values(["Product_Group", "Coming_to_load_or_Unload"]).reset_index(drop=True), hide_index=True)
+
