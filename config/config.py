@@ -3,10 +3,9 @@
 import os
 
 # Choose environment: "local" or "host"
-# You can change this manually, or override with an environment variable
 ENVIRONMENT = os.getenv("APP_ENV", "local")
 
-# Spreadsheet configuration (same for both)
+# Spreadsheet configuration
 SPREADSHEET_ID = "1KMpaAiTMAlWsGxLZaqrWJfIXL8ynUt5i0nfsja7mXWs"
 
 SHEET_GIDS = {
@@ -18,11 +17,14 @@ SHEET_GIDS = {
 
 REFRESH_INTERVAL_SECONDS = 30
 
+# Cambodia Timezone (UTC+7)
+CAMBODIA_TZ = "Asia/Phnom_Penh"     # This is already UTC+7
+UTC_OFFSET = "+07:00"               # Optional descriptive label
+
 # Timezone auto-switch
 if ENVIRONMENT == "local":
-    LOCAL_TZ = "Asia/Phnom_Penh"
+    LOCAL_TZ = CAMBODIA_TZ
     DEBUG_MODE = True
 else:
-    LOCAL_TZ = "Asia/Phnom_Penh"  # still show local time even if host is UTC
+    LOCAL_TZ = CAMBODIA_TZ   # still show local time even if host server uses UTC
     DEBUG_MODE = False
-    
