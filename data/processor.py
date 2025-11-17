@@ -1,23 +1,27 @@
 # data/processor.py
 import pandas as pd
+from config.config import LOCAL_TZ
 
-# column renames & maps (from your spec)
+# ---------------- RENAME MAPS ----------------
 SECURITY_RENAME = {
     "ស្លាកលេខឡាន": "Truck_Plate_Number",
     "បរិមាណផ្ទុកទំនិញ": "Truck_Load_Capacity_by_Security",
     "អ្នកកំពុងស្កេនចេញ ឬ ចូល?": "Scan_In_or_Out",
     "អ្នកកមកឡើង ឬ ទម្លាក់​​ឥវ៉ាន់": "Coming_to_Upload_or_Unload"
 }
+
 DRIVER_RENAME = {
     "ឈ្មោះ": "Driver_Name",
     "ស្លាកលេខឡាន": "Truck_Plate_Number",
     "លេខទូរស័ព្វ": "Phone_Number",
     "បរិមាណផ្ទុកទំនិញគិតជាតោន": "Truck_Load_Capacity_by_Driver"
 }
+
 STATUS_RENAME = {
     "ស្លាកលេខឡាន": "Truck_Plate_Number",
     "ប្រភេទទំនិញ": "Product_Group"
 }
+
 LOGISTIC_RENAME = {
     "ប្រភេទទំនិញ": "Product_Group",
     "ស្លាកលេខឡាន": "Truck_Plate_Number",
@@ -25,38 +29,55 @@ LOGISTIC_RENAME = {
     "Outbound Delivery Nº": "Outbound_Delivery_No"
 }
 
-gate_map = {"​ចូល": "Gate_in", "ចេញ": "Gate_out"}
-load_map = {"ឡើង ទំនិញ": "Uploading", "ទម្លាក់ ទំនិញ": "Unloading"}
+# ---------------- CLEAN MAPS ----------------
+gate_map = {
+    "ចូល": "Gate_in",
+    "ចេញ": "Gate_out"
+}
+
+load_map = {
+    "ឡើង ទំនិញ": "Uploading",
+    "ទម្លាក់ ទំនិញ": "Unloading"
+}
+
 product_map = {
     "ទីប ជ្រុង ទីបមូល": "Pipe",
     "ដំរ៉ូឡូ ជម្រៀក": "Coil",
+    "ដំរ៉ូឡូ": "Coil",   # extra safety
     "ដែកសសៃ ដែកកង និង ដែក I & H": "Trading",
     "ស័ង្កសី": "Roofing",
     "ស័ង្កសី PU": "PU",
     "Other": "Other"
 }
+
 status_map_full = {
     "ចាប់ផ្តើមឡើងឬទម្លាក់ទំនិញ​ /Start Loading": "Start_Loading",
     "ឡើងឬទម្លាក់ទំនិញ​រួចរាល់ /Completed": "Completed",
     "មកដល់ច្រករង់ចាំ /Arrival": "Arrival"
 }
 
+
+# ---------------- PROCESS FUNCTION ----------------
+
 def clean_sheet_dfs(dfs: dict):
     """
-    Input: dict of raw dfs from loader (security, driver, status, logistic)
-    Returns: cleaned dict (same keys) with renamed columns, mapping applied, timestamps parsed.
+    Standardized cleaning:
+        - Rename Khmer → English columns
+        - Apply status + product maps
+        - Apply timezone-aware timestamp parsing
     """
     df_security = dfs['security'].rename(columns=SECURITY_RENAME)
     df_driver = dfs['driver'].rename(columns=DRIVER_RENAME)
     df_status = dfs['status'].rename(columns=STATUS_RENAME)
     df_logistic = dfs['logistic'].rename(columns=LOGISTIC_RENAME)
 
-    # parse timestamps
+    # TIMEZONE-AWARE parsing
     for df in (df_security, df_driver, df_status, df_logistic):
         if "Timestamp" in df.columns:
-            df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+            ts = pd.to_datetime(df["Timestamp"], errors="coerce")
+            df["Timestamp"] = ts.dt.tz_localize(LOCAL_TZ, nonexistent='shift_forward', ambiguous='NaT')
 
-    # apply map replacements safely
+    # APPLY MAPS
     if "Scan_In_or_Out" in df_security.columns:
         df_security["Scan_In_or_Out"] = df_security["Scan_In_or_Out"].replace(gate_map)
 
