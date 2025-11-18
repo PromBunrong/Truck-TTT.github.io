@@ -112,11 +112,27 @@ def show_current_waiting(df_security, df_status, df_driver, product_filter=None,
     # Final safety: only show columns that exist
     display_cols = [c for c in display_cols if c in waiting.columns]
 
+    # # --- Display ---
+    # st.subheader("Current Waiting Trucks")
+    # st.dataframe(
+    #     waiting[display_cols]
+    #     .sort_values("Waiting_min", ascending=False)
+    #     .reset_index(drop=True),
+    #     hide_index=True
+    # )
+
+    # --- Format time-only display ---
+    time_cols = ["Arrival_Time"]
+    for c in time_cols:
+        if c in waiting.columns:
+            waiting[c] = waiting[c].dt.strftime("%H:%M:%S")
+
     # --- Display ---
     st.subheader("Current Waiting Trucks")
     st.dataframe(
         waiting[display_cols]
-        .sort_values("Waiting_min", ascending=False)
-        .reset_index(drop=True),
+            .sort_values("Waiting_min", ascending=False)
+            .reset_index(drop=True),
         hide_index=True
     )
+

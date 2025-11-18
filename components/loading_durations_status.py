@@ -68,6 +68,13 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
     # Add Mission column
     df_kpi["Mission"] = df_kpi.apply(_compute_mission, axis=1)
 
+    # --- Format timestamp columns to show ONLY time ---
+    time_cols = ["Arrival_Time", "Start_Loading_Time", "Completed_Time"]
+    for c in time_cols:
+        if c in df_kpi.columns:
+            df_kpi[c] = df_kpi[c].dt.strftime("%H:%M:%S")
+
+
     # Reorder columns for display (adjust as you prefer)
     display_cols = [
         "Product_Group",
@@ -88,4 +95,10 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
     display_cols = [c for c in display_cols if c in df_kpi.columns]
 
     st.subheader("Loading Durations Status")
-    st.dataframe(df_kpi[display_cols].reset_index(drop=True).sort_values(["Product_Group", "Date", "Truck_Plate_Number"]).reset_index(drop=True), hide_index=True)
+    # st.dataframe(df_kpi[display_cols].reset_index(drop=True).sort_values(["Product_Group", "Date", "Truck_Plate_Number"]).reset_index(drop=True), hide_index=True)
+    st.dataframe(
+        df_kpi[display_cols]
+            .sort_values(["Product_Group", "Date", "Truck_Plate_Number"])
+            .reset_index(drop=True),
+        hide_index=True
+    )
