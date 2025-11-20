@@ -188,10 +188,10 @@ def compute_per_truck_metrics(
 
     # upload_type (from security first-known)
     if upload_type:
-        if "Coming_to_Upload_or_Unload" in df_security.columns:
-            sec_map = df_security.groupby("Truck_Plate_Number")["Coming_to_Upload_or_Unload"].agg("first")
+        if "Coming_to_Load_or_Unload" in df_security.columns:
+            sec_map = df_security.groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"].agg("first")
             kpi = kpi.join(sec_map, on="Truck_Plate_Number")
-            kpi = kpi[kpi["Coming_to_Upload_or_Unload"] == upload_type]
+            kpi = kpi[kpi["Coming_to_Load_or_Unload"] == upload_type]
 
     # Select columns and order for display
     display_cols = [

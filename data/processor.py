@@ -1,18 +1,37 @@
 # data/processor.py
 import pandas as pd
+import re
 from config.config import LOCAL_TZ
+
+# ---------------- NORMALIZE ----------------
+def normalize_plate(x):
+    """
+    Normalize truck plate strings to a canonical format:
+    - uppercase
+    - trim spaces
+    - replace separators (space, dot, colon, underscore, slash…) with hyphen
+    - collapse multiple hyphens into one
+    """
+    if pd.isna(x):
+        return x
+    x = str(x).upper().strip()
+    x = re.sub(r"[ ._:;/\\]+", "-", x)   # replace separators with '-'
+    x = re.sub(r"-+", "-", x)            # collapse multiple hyphens
+    x = x.strip("-")                     # remove leading/trailing hyphens
+    return x
+
 
 # ---------------- RENAME MAPS ----------------
 SECURITY_RENAME = {
     "ស្លាកលេខឡាន": "Truck_Plate_Number",
     "បរិមាណផ្ទុកទំនិញ": "Truck_Load_Capacity_by_Security",
     "អ្នកកំពុងស្កេនចេញ ឬ ចូល?": "Scan_In_or_Out",
-    "អ្នកកមកឡើង ឬ ទម្លាក់​​ឥវ៉ាន់": "Coming_to_Upload_or_Unload"
+    "អ្នកកមកឡើង ឬ ទម្លាក់​​ឥវ៉ាន់": "Coming_to_Load_or_Unload"
 }
 
 DRIVER_RENAME = {
     "ឈ្មោះ": "Driver_Name",
-    "ស្លាកលេខឡាន": "Truck_Plate_Number",
+    "ស្លាកលេខឡាន": "Truck_Plate_Number",   # ← THIS ONE MUST BE THIS
     "លេខទូរស័ព្វ": "Phone_Number",
     "បរិមាណផ្ទុកទំនិញគិតជាតោន": "Truck_Load_Capacity_by_Driver"
 }
@@ -29,6 +48,7 @@ LOGISTIC_RENAME = {
     "Outbound Delivery Nº": "Outbound_Delivery_No"
 }
 
+
 # ---------------- CLEAN MAPS ----------------
 gate_map = {
     "ចូល": "Gate_in",
@@ -36,14 +56,14 @@ gate_map = {
 }
 
 load_map = {
-    "ឡើង ទំនិញ": "Uploading",
+    "ឡើង ទំនិញ": "Loading",
     "ទម្លាក់ ទំនិញ": "Unloading"
 }
 
 product_map = {
     "ទីប ជ្រុង ទីបមូល": "Pipe",
     "ដំរ៉ូឡូ ជម្រៀក": "Coil",
-    "ដំរ៉ូឡូ": "Coil",   # extra safety
+    "ដំរ៉ូឡូ": "Coil",
     "ដែកសសៃ ដែកកង និង ដែក I & H": "Trading",
     "ស័ង្កសី": "Roofing",
     "ស័ង្កសី PU": "PU",
@@ -58,31 +78,42 @@ status_map_full = {
 
 
 # ---------------- PROCESS FUNCTION ----------------
-
 def clean_sheet_dfs(dfs: dict):
     """
-    Standardized cleaning:
-        - Rename Khmer → English columns
-        - Apply status + product maps
-        - Apply timezone-aware timestamp parsing
+    Standard cleaning:
+      - Rename fields
+      - Normalize truck plates
+      - Apply maps
+      - Use original timezone logic (no changes)
     """
+
+    # Copy & rename
     df_security = dfs['security'].rename(columns=SECURITY_RENAME)
     df_driver = dfs['driver'].rename(columns=DRIVER_RENAME)
     df_status = dfs['status'].rename(columns=STATUS_RENAME)
     df_logistic = dfs['logistic'].rename(columns=LOGISTIC_RENAME)
 
-    # TIMEZONE-AWARE parsing
+    # Normalize truck plate numbers
+    for df in (df_security, df_driver, df_status, df_logistic):
+        if "Truck_Plate_Number" in df.columns:
+            df["Truck_Plate_Number"] = df["Truck_Plate_Number"].apply(normalize_plate)
+
+    # ---- ORIGINAL TIMEZONE LOGIC (UNCHANGED) ----
     for df in (df_security, df_driver, df_status, df_logistic):
         if "Timestamp" in df.columns:
             ts = pd.to_datetime(df["Timestamp"], errors="coerce")
-            df["Timestamp"] = ts.dt.tz_localize(LOCAL_TZ, nonexistent='shift_forward', ambiguous='NaT')
+            df["Timestamp"] = ts.dt.tz_localize(
+                LOCAL_TZ,
+                nonexistent='shift_forward',
+                ambiguous='NaT'
+            )
 
-    # APPLY MAPS
+    # Apply mappings
     if "Scan_In_or_Out" in df_security.columns:
         df_security["Scan_In_or_Out"] = df_security["Scan_In_or_Out"].replace(gate_map)
 
-    if "Coming_to_Upload_or_Unload" in df_security.columns:
-        df_security["Coming_to_Upload_or_Unload"] = df_security["Coming_to_Upload_or_Unload"].replace(load_map)
+    if "Coming_to_Load_or_Unload" in df_security.columns:
+        df_security["Coming_to_Load_or_Unload"] = df_security["Coming_to_Load_or_Unload"].replace(load_map)
 
     if "Product_Group" in df_status.columns:
         df_status["Product_Group"] = df_status["Product_Group"].replace(product_map)

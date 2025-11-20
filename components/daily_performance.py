@@ -34,8 +34,8 @@ def show_daily_performance(dfs, selected_date, product_selected, upload_type):
         return
 
     # Prepare coming-to-load (from security) mapped per truck
-    if "Coming_to_Upload_or_Unload" in df_security.columns:
-        sec_map = df_security.groupby("Truck_Plate_Number")["Coming_to_Upload_or_Unload"].agg("first").rename("Coming_to_load_or_Unload").reset_index()
+    if "Coming_to_Load_or_Unload" in df_security.columns:
+        sec_map = df_security.groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"].agg("first").rename("Coming_to_load_or_Unload").reset_index()
     else:
         sec_map = pd.DataFrame(columns=["Truck_Plate_Number", "Coming_to_load_or_Unload"])
 

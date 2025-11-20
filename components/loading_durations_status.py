@@ -14,11 +14,11 @@ def _compute_mission(row):
     missing_completed = pd.isna(completed)
 
     if missing_start and missing_completed:
-        return "Missing Start loading, completed"
+        return "Missing loading, complete"
     if missing_start:
         return "Missing Start Loading"
     if missing_completed:
-        return "Missing Completed"
+        return "Missing Complete"
     return "Pending"  # fallback (shouldn't normally happen)
 
 def show_loading_durations_status(dfs, selected_date, product_selected, upload_type):

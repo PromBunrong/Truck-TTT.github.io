@@ -58,10 +58,10 @@ def show_current_waiting(df_security, df_status, df_driver, product_filter=None,
     waiting = waiting.rename(columns={"Timestamp": "Arrival_Time"})
 
     # --- Merge Coming_to_Upload_or_Unload from Security ---
-    if "Coming_to_Upload_or_Unload" in df_security.columns:
+    if "Coming_to_Load_or_Unload" in df_security.columns:
         sec_map = (
             df_security.sort_values("Timestamp")
-            .groupby("Truck_Plate_Number")["Coming_to_Upload_or_Unload"]
+            .groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"]
             .last()
         )
         waiting = waiting.join(sec_map, how="left")
@@ -86,8 +86,8 @@ def show_current_waiting(df_security, df_status, df_driver, product_filter=None,
     if product_filter:
         waiting = waiting[waiting["Product_Group"].isin(product_filter)]
 
-    if upload_type and "Coming_to_Upload_or_Unload" in waiting.columns:
-        waiting = waiting[waiting["Coming_to_Upload_or_Unload"] == upload_type]
+    if upload_type and "Coming_to_Load_or_Unload" in waiting.columns:
+        waiting = waiting[waiting["Coming_to_Load_or_Unload"] == upload_type]
 
     # --- Compute correct Waiting time ---
     waiting["Waiting_min"] = (now - waiting["Arrival_Time"]) / pd.Timedelta(minutes=1)
@@ -96,8 +96,8 @@ def show_current_waiting(df_security, df_status, df_driver, product_filter=None,
     waiting = waiting.reset_index()
 
     # Rename for display
-    if "Coming_to_Upload_or_Unload" in waiting.columns:
-        waiting = waiting.rename(columns={"Coming_to_Upload_or_Unload": "Coming_to_load_or_Unload"})
+    if "Coming_to_Load_or_Unload" in waiting.columns:
+        waiting = waiting.rename(columns={"Coming_to_Load_or_Unload": "Coming_to_load_or_Unload"})
 
     display_cols = [
         "Product_Group",

@@ -17,7 +17,7 @@ def render_sidebar(default_date, refresh_interval_seconds):
     manual_refresh = st.sidebar.button("Manual refresh")
 
     # Upload/Unload selector
-    upload_type = st.sidebar.selectbox("Uploading / Unloading", options=["All", "Uploading", "Unloading"], index=0)
+    upload_type = st.sidebar.selectbox("Loading / Unloading", options=["All", "Loading", "Unloading"], index=0)
 
     # Product groups (multi)
     product_options = ["Pipe", "Coil", "Trading", "Roofing", "PU", "Other"]
