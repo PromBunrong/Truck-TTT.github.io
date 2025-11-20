@@ -20,6 +20,19 @@ def normalize_plate(x):
     x = x.strip("-")                     # remove leading/trailing hyphens
     return x
 
+def normalize_khmer_text(x):
+    if pd.isna(x):
+        return x
+    x = str(x).strip()
+
+    # Remove zero-width spaces, joiners, variation selectors, etc.
+    x = re.sub(r"[\u200B-\u200D\uFE00-\uFE0F]", "", x)
+
+    # Collapse double spaces
+    x = re.sub(r"\s+", " ", x)
+
+    return x
+
 
 # ---------------- RENAME MAPS ----------------
 SECURITY_RENAME = {
@@ -83,6 +96,7 @@ def clean_sheet_dfs(dfs: dict):
     Standard cleaning:
       - Rename fields
       - Normalize truck plates
+      - Normalize Khmer product names
       - Apply maps
       - Use original timezone logic (no changes)
     """
@@ -93,12 +107,16 @@ def clean_sheet_dfs(dfs: dict):
     df_status = dfs['status'].rename(columns=STATUS_RENAME)
     df_logistic = dfs['logistic'].rename(columns=LOGISTIC_RENAME)
 
+    # -------------------------------
     # Normalize truck plate numbers
+    # -------------------------------
     for df in (df_security, df_driver, df_status, df_logistic):
         if "Truck_Plate_Number" in df.columns:
             df["Truck_Plate_Number"] = df["Truck_Plate_Number"].apply(normalize_plate)
 
-    # ---- ORIGINAL TIMEZONE LOGIC (UNCHANGED) ----
+    # -------------------------------
+    # ORIGINAL TIMEZONE LOGIC
+    # -------------------------------
     for df in (df_security, df_driver, df_status, df_logistic):
         if "Timestamp" in df.columns:
             ts = pd.to_datetime(df["Timestamp"], errors="coerce")
@@ -108,7 +126,19 @@ def clean_sheet_dfs(dfs: dict):
                 ambiguous='NaT'
             )
 
+    # -------------------------------
+    # Normalize Khmer Product_Group
+    # (Fix invisible Unicode: zero-width, joiners)
+    # -------------------------------
+    if "Product_Group" in df_status.columns:
+        df_status["Product_Group"] = df_status["Product_Group"].apply(normalize_khmer_text)
+
+    if "Product_Group" in df_logistic.columns:
+        df_logistic["Product_Group"] = df_logistic["Product_Group"].apply(normalize_khmer_text)
+
+    # -------------------------------
     # Apply mappings
+    # -------------------------------
     if "Scan_In_or_Out" in df_security.columns:
         df_security["Scan_In_or_Out"] = df_security["Scan_In_or_Out"].replace(gate_map)
 
@@ -124,9 +154,13 @@ def clean_sheet_dfs(dfs: dict):
     if "Status" in df_status.columns:
         df_status["Status"] = df_status["Status"].replace(status_map_full)
 
+    # -------------------------------
+    # Return cleaned data
+    # -------------------------------
     return {
         'security': df_security,
         'driver': df_driver,
         'status': df_status,
         'logistic': df_logistic
     }
+
