@@ -132,15 +132,49 @@ def compute_per_truck_metrics(
 
     kpi["Completed_Time"] = pd.Series(end_times, name="Completed_Time")
 
-    # --- Durations (minutes) ---
+    # --- DURATION CALCULATIONS (your rules) ---
+
     def td_min(start, end):
         if pd.isna(start) or pd.isna(end):
-            return np.nan
+            return None
         return (end - start) / pd.Timedelta(minutes=1)
 
-    kpi["Waiting_min"] = kpi.apply(lambda r: td_min(r.get("Arrival_Time"), r.get("Start_Loading_Time")), axis=1)
-    kpi["Loading_min"] = kpi.apply(lambda r: td_min(r.get("Start_Loading_Time"), r.get("Completed_Time")), axis=1)
-    kpi["Total_min"]   = kpi.apply(lambda r: td_min(r.get("Arrival_Time"), r.get("Completed_Time")), axis=1)
+
+    # 1) Waiting_min = ABS(time difference)
+    kpi["Waiting_min"] = kpi.apply(
+        lambda r: abs(td_min(r.get("Arrival_Time"), r.get("Start_Loading_Time")))
+        if td_min(r.get("Arrival_Time"), r.get("Start_Loading_Time")) is not None
+        else None,
+        axis=1
+    )
+
+    # 2) Loading_min = ABS(time difference)
+    kpi["Loading_min"] = kpi.apply(
+        lambda r: abs(td_min(r.get("Start_Loading_Time"), r.get("Completed_Time")))
+        if td_min(r.get("Start_Loading_Time"), r.get("Completed_Time")) is not None
+        else None,
+        axis=1
+    )
+
+    # 3) Total_min rules:
+    #    - Both exist → waiting + loading
+    #    - Only loading exists → loading
+    #    - Only waiting exists → None
+    #    - None → None
+    def compute_total(row):
+        w = row.get("Waiting_min")
+        l = row.get("Loading_min")
+
+        if w is not None and l is not None:
+            return w + l
+        if w is None and l is not None:
+            return l
+        if w is not None and l is None:
+            return None
+        return None
+
+    kpi["Total_min"] = kpi.apply(compute_total, axis=1)
+
 
     # --- Date attribution: prefer Arrival_Time.date, else Start_Loading_Time.date, else Completed_Time.date
     def derive_date(row):
