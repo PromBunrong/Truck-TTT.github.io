@@ -100,6 +100,18 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
         # No logistic data to map, create column
         df_kpi["Total_Weight_MT"] = None
 
+    # --- Add Phone_Number (prefer driver table, fallback to security) ---
+    phone_map = None
+    if "Phone_Number" in df_driver.columns and "Truck_Plate_Number" in df_driver.columns:
+        phone_map = df_driver.groupby("Truck_Plate_Number")["Phone_Number"].agg(lambda s: s.dropna().iloc[0] if not s.dropna().empty else None).reset_index()
+    elif "Phone_Number" in df_security.columns and "Truck_Plate_Number" in df_security.columns:
+        phone_map = df_security.groupby("Truck_Plate_Number")["Phone_Number"].agg(lambda s: s.dropna().iloc[0] if not s.dropna().empty else None).reset_index()
+
+    if phone_map is not None:
+        df_kpi = df_kpi.merge(phone_map, on="Truck_Plate_Number", how="left")
+    else:
+        df_kpi["Phone_Number"] = None
+
     # Compute Loading_Rate (min/MT) safely
     def compute_rate(r):
         try:
@@ -113,6 +125,26 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
 
     df_kpi["Loading_Rate"] = df_kpi.apply(compute_rate, axis=1)
 
+    # Rename Loading_Rate to Loading_Rate_min/MT for clarity, and add Loading_Rate_MT/Hour
+    if "Loading_Rate" in df_kpi.columns:
+        df_kpi = df_kpi.rename(columns={"Loading_Rate": "Loading_Rate_min/MT"})
+
+    def compute_mt_per_hour(r):
+        try:
+            wt = r.get("Total_Weight_MT")
+            lm = r.get("Loading_min")
+            if pd.isna(wt) or pd.isna(lm) or lm == 0:
+                return None
+            return (float(wt) * 60.0) / float(lm)
+        except Exception:
+            return None
+
+    df_kpi["Loading_Rate_MT/Hour"] = df_kpi.apply(compute_mt_per_hour, axis=1)
+    # Nicely round numeric rates
+    for col in ["Loading_Rate_min/MT", "Loading_Rate_MT/Hour"]:
+        if col in df_kpi.columns:
+            df_kpi[col] = pd.to_numeric(df_kpi[col], errors="coerce").round(3)
+
     # Add Mission column
     df_kpi["Mission"] = df_kpi.apply(_compute_mission, axis=1)
 
@@ -120,15 +152,16 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
     display_cols = [
         "Product_Group",
         "Truck_Plate_Number",
+        "Phone_Number",
         "Date",
         "Arrival_Time",
         "Start_Loading_Time",
         "Completed_Time",
         "Waiting_min",
         "Loading_min",
-        "Total_min",
         "Total_Weight_MT",
-        "Loading_Rate",
+        "Loading_Rate_min/MT",
+        "Loading_Rate_MT/Hour",
         "Mission",
     ]
     display_cols = [c for c in display_cols if c in df_kpi.columns]
@@ -142,9 +175,13 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
 
     st.subheader("Loading Durations Status")
     # Sort and display, hide index
-    st.dataframe(
-        df_kpi[display_cols]
-        .sort_values(["Product_Group", "Date", "Truck_Plate_Number"])
-        .reset_index(drop=True),
-        hide_index=True
-    )
+    df_view = df_kpi[display_cols].sort_values(["Product_Group", "Date", "Truck_Plate_Number"]).reset_index(drop=True)
+    n_rows = len(df_view)
+    # If more than 5 rows, give a fixed height so the table becomes scrollable
+    if n_rows > 5:
+        row_h = 40
+        header_h = 40
+        height = header_h + row_h * 5
+        st.dataframe(df_view, hide_index=True, height=height)
+    else:
+        st.dataframe(df_view, hide_index=True)

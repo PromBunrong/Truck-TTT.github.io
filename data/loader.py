@@ -13,11 +13,27 @@ def load_sheet_by_gid(gid: str):
 
 @st.cache_data(ttl=15)
 def load_all_sheets():
+    # Force truck plate columns to be read as string to avoid numeric conversion
+    # (e.g., "3A-1111" → "0.00E+00" in Excel/GoogleSheets)
+    security_url = _sheet_csv_url(SHEET_GIDS['security'])
+    driver_url = _sheet_csv_url(SHEET_GIDS['driver'])
+    status_url = _sheet_csv_url(SHEET_GIDS['status'])
+    logistic_url = _sheet_csv_url(SHEET_GIDS['logistic'])
+    
+    df_security = pd.read_csv(security_url, dtype=str, keep_default_na=False)
+    df_driver = pd.read_csv(driver_url, dtype=str, keep_default_na=False)
+    df_status = pd.read_csv(status_url, dtype=str, keep_default_na=False)
+    df_logistic = pd.read_csv(logistic_url, dtype=str, keep_default_na=False)
+    
+    # Replace empty strings with NaN for proper handling
+    for df in [df_security, df_driver, df_status, df_logistic]:
+        df.replace('', pd.NA, inplace=True)
+    
     return {
-        'security': load_sheet_by_gid(SHEET_GIDS['security']),
-        'driver': load_sheet_by_gid(SHEET_GIDS['driver']),
-        'status': load_sheet_by_gid(SHEET_GIDS['status']),
-        'logistic': load_sheet_by_gid(SHEET_GIDS['logistic']),
+        'security': df_security,
+        'driver': df_driver,
+        'status': df_status,
+        'logistic': df_logistic,
     }
 
 def get_current_date_from_sheets(dfs: dict):

@@ -39,7 +39,8 @@ SECURITY_RENAME = {
     "ស្លាកលេខឡាន": "Truck_Plate_Number",
     "បរិមាណផ្ទុកទំនិញ": "Truck_Load_Capacity_by_Security",
     "អ្នកកំពុងស្កេនចេញ ឬ ចូល?": "Scan_In_or_Out",
-    "អ្នកកមកឡើង ឬ ទម្លាក់​​ឥវ៉ាន់": "Coming_to_Load_or_Unload"
+    "អ្នកកមកឡើង ឬ ទម្លាក់​​ឥវ៉ាន់": "Coming_to_Load_or_Unload",  # old version with ក
+    "អ្នកមកឡើង ឬ ទម្លាក់​​ឥវ៉ាន់": "Coming_to_Load_or_Unload"   # new version without ក (actual in sheet)
 }
 
 DRIVER_RENAME = {
@@ -153,6 +154,23 @@ def clean_sheet_dfs(dfs: dict):
 
     if "Status" in df_status.columns:
         df_status["Status"] = df_status["Status"].replace(status_map_full)
+
+    # -------------------------------
+    # Convert numeric columns back to proper types
+    # (after loading as str to preserve truck plates)
+    # -------------------------------
+    # Security: capacity
+    if "Truck_Load_Capacity_by_Security" in df_security.columns:
+        df_security["Truck_Load_Capacity_by_Security"] = pd.to_numeric(df_security["Truck_Load_Capacity_by_Security"], errors="coerce")
+    
+    # Driver: capacity, phone
+    if "Truck_Load_Capacity_by_Driver" in df_driver.columns:
+        df_driver["Truck_Load_Capacity_by_Driver"] = pd.to_numeric(df_driver["Truck_Load_Capacity_by_Driver"], errors="coerce")
+    # Keep Phone_Number as string
+    
+    # Logistic: Total_Weight_MT
+    if "Total_Weight_MT" in df_logistic.columns:
+        df_logistic["Total_Weight_MT"] = pd.to_numeric(df_logistic["Total_Weight_MT"], errors="coerce")
 
     # -------------------------------
     # Return cleaned data

@@ -14,13 +14,20 @@ from components.status_summary import show_status_summary
 from components.current_waiting import show_current_waiting
 from components.loading_durations_status import show_loading_durations_status
 from components.daily_performance import show_daily_performance
+from components.styles import inject_styles
 
 
 # ----------------------------------------------------
 # APP CONFIG
 # ----------------------------------------------------
 st.set_page_config(page_title="🚚 Truck Turnaround Live Dashboard — HOSTED", layout="wide")
-st.title("🚚 Truck Turnaround Live Dashboard — Scope 1 (HOSTED MODE)")
+# Inject local CSS (if present) to compact spacing
+try:
+    inject_styles()
+except Exception:
+    pass
+
+st.title("🚚 Truck Turnaround Live Dashboard")
 
 # ----------------------------------------------------
 # LOAD DATA
@@ -111,7 +118,7 @@ st.divider()
 
 # 2️⃣ CURRENT WAITING TRUCKS
 show_current_waiting(
-    dfs['security'], dfs['status'], dfs['driver'],
+    dfs['security'], dfs['status'], dfs['driver'], dfs.get('logistic'),
     product_filter=sb["product_selected"],
     upload_type=sb["upload_type"],
     selected_date=sb["selected_date"]
