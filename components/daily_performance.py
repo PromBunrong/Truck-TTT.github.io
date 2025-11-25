@@ -71,39 +71,21 @@ def show_daily_performance(dfs, selected_date, product_selected, upload_type):
         df_kpi["Total_Weight_MT"] = None
 
     # ---------------------------------------------------------------------
-    # --- Step 3: Attach Coming_to_load_or_Unload from Security (date-aware) ---
-    # Prefer security records that occurred on the selected_date; fallback to first-known overall
+    # --- Step 3: Attach Coming_to_load_or_Unload from Security ---
     # ---------------------------------------------------------------------
-    if "Coming_to_Load_or_Unload" in df_security.columns and "Timestamp" in df_security.columns:
-        # parse Timestamp and compute date
-        df_security = df_security.copy()
-        df_security["Timestamp"] = pd.to_datetime(df_security["Timestamp"], errors="coerce")
-        df_security["_Date"] = df_security["Timestamp"].dt.date
-
-        if selected_date is not None:
-            # use records on that date first
-            sec_for_date = df_security[df_security["_Date"] == selected_date].sort_values("Timestamp")
-            sec_map_date = sec_for_date.groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"].agg("first").rename("Coming_to_load_or_Unload").reset_index()
-        else:
-            sec_map_date = pd.DataFrame(columns=["Truck_Plate_Number", "Coming_to_load_or_Unload"])
-
-        # fallback map from full history (first-known)
-        sec_map_hist = df_security.sort_values("Timestamp").groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"].agg("first").rename("Coming_to_load_or_Unload").reset_index()
-
-        # merge date-specific map first, then fill missing from history
-        if not sec_map_date.empty:
-            df_kpi = df_kpi.merge(sec_map_date, on="Truck_Plate_Number", how="left")
-            # find trucks missing date-specific entry and fill from history
-            missing = df_kpi["Coming_to_load_or_Unload"].isna()
-            if missing.any():
-                df_kpi = df_kpi.merge(sec_map_hist, on="Truck_Plate_Number", how="left", suffixes=("", "_hist"))
-                df_kpi["Coming_to_load_or_Unload"] = df_kpi["Coming_to_load_or_Unload"].fillna(df_kpi.get("Coming_to_load_or_Unload_hist"))
-                df_kpi = df_kpi.drop(columns=[c for c in df_kpi.columns if c.endswith("_hist")])
-        else:
-            df_kpi = df_kpi.merge(sec_map_hist, on="Truck_Plate_Number", how="left")
-
+    if "Coming_to_Load_or_Unload" in df_security.columns:
+        sec_map = (
+            df_security
+            .sort_values("Timestamp")
+            .groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"]
+            .agg("first")
+            .rename("Coming_to_load_or_Unload")
+            .reset_index()
+        )
     else:
-        df_kpi = df_kpi.assign(Coming_to_load_or_Unload=None)
+        sec_map = pd.DataFrame(columns=["Truck_Plate_Number", "Coming_to_load_or_Unload"])
+
+    df_kpi = df_kpi.merge(sec_map, on="Truck_Plate_Number", how="left")
 
     # ---------------------------------------------------------------------
     # --- Step 4: Compute Loading_Rate (Total_min per MT) ---
@@ -163,12 +145,7 @@ def show_daily_performance(dfs, selected_date, product_selected, upload_type):
     ]
 
     # Sort and display
-    df_view = agg[cols].sort_values(["Product_Group", "Coming_to_load_or_Unload"]).reset_index(drop=True)
-    n_rows = len(df_view)
-    if n_rows > 5:
-        row_h = 40
-        header_h = 40
-        height = header_h + row_h * 5
-        st.dataframe(df_view, hide_index=True, height=height)
-    else:
-        st.dataframe(df_view, hide_index=True)
+    st.dataframe(
+        agg[cols].sort_values(["Product_Group", "Coming_to_load_or_Unload"]).reset_index(drop=True),
+        hide_index=True
+    )
