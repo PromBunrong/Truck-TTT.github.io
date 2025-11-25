@@ -1,4 +1,4 @@
-# data/metrics.py
+ # data/metrics.py
 import pandas as pd
 import numpy as np
 from config.config import LOCAL_TZ
@@ -67,52 +67,103 @@ def compute_per_truck_metrics(
     # Arrival: earliest Arrival event on that date
     arrival = status_for_date[status_for_date["Status"] == "Arrival"].groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_min).rename("Arrival_Time")
 
-    # Start loading: earliest Start_Loading event on that date
-    start_loading = status_for_date[status_for_date["Status"] == "Start_Loading"].groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_min).rename("Start_Loading_Time")
+    # Start loading: earliest Start_Loading event on that date PER TRUCK+PRODUCT
+    start_loading_prod = status_for_date[status_for_date["Status"] == "Start_Loading"].copy()
+    if not start_loading_prod.empty and "Product_Group" in start_loading_prod.columns:
+        start_loading_prod = start_loading_prod.groupby(["Truck_Plate_Number", "Product_Group"])["Timestamp"].agg(_safe_min).rename("Start_Loading_Time").reset_index()
+    else:
+        start_loading_prod = pd.DataFrame(columns=["Truck_Plate_Number", "Product_Group", "Start_Loading_Time"]) 
 
-    # Completed events on that date (keep list)
+    # Completed events on that date (keep list) PER TRUCK+PRODUCT
     completed_all = status_for_date[status_for_date["Status"] == "Completed"].copy()
-    completed_grouped = completed_all.groupby("Truck_Plate_Number")["Timestamp"].apply(lambda s: sorted(s.dropna().tolist())).to_dict()
+    if not completed_all.empty and "Product_Group" in completed_all.columns:
+        completed_grouped = completed_all.groupby(["Truck_Plate_Number", "Product_Group"])["Timestamp"].apply(lambda s: sorted(s.dropna().tolist())).to_dict()
+    else:
+        # fallback to empty dict
+        completed_grouped = {}
 
-    # Product group: prefer status of the date, then fallback to logistic_for_date, then full history
-    prod_from_status = status_for_date.groupby("Truck_Plate_Number")["Product_Group"].agg(lambda s: s.dropna().iloc[0] if not s.dropna().empty else np.nan)
-    prod_from_log_date = logistic_for_date.groupby("Truck_Plate_Number")["Product_Group"].agg(lambda s: s.dropna().iloc[0] if not s.dropna().empty else np.nan)
-    # fallback to any status/product in historical df_status if still missing
-    prod_from_status_hist = df_status.groupby("Truck_Plate_Number")["Product_Group"].agg(lambda s: s.dropna().iloc[0] if not s.dropna().empty else np.nan)
+    # --- Product groups per truck (support multi-product visits) ---
+    # Gather all product groups observed per truck across status/logistic (date-limited) and historical status
+    from collections import defaultdict
 
-    product = prod_from_status.combine_first(prod_from_log_date).combine_first(prod_from_status_hist).rename("Product_Group")
+    prod_sets = defaultdict(set)
+    def _accumulate_products(df):
+        if "Product_Group" not in df.columns or "Truck_Plate_Number" not in df.columns:
+            return
+        for truck, grp in df.groupby("Truck_Plate_Number")["Product_Group"]:
+            vals = [v for v in pd.Series(grp).dropna().unique().tolist() if pd.notna(v)]
+            for v in vals:
+                prod_sets[truck].add(v)
+
+    _accumulate_products(status_for_date)
+    _accumulate_products(logistic_for_date)
+    _accumulate_products(df_status)
 
     # Build base set of truck plates (union across relevant dfs)
-    trucks = pd.Index(sorted(
-        set(df_status["Truck_Plate_Number"].dropna().unique())
-        | set(df_logistic["Truck_Plate_Number"].dropna().unique())
-        | set(df_security["Truck_Plate_Number"].dropna().unique())
-        | set(df_driver["Truck_Plate_Number"].dropna().unique())
-    ), name="Truck_Plate_Number")
+    trucks = sorted(
+        set(df_status.get("Truck_Plate_Number", pd.Series(dtype=object)).dropna().unique())
+        | set(df_logistic.get("Truck_Plate_Number", pd.Series(dtype=object)).dropna().unique())
+        | set(df_security.get("Truck_Plate_Number", pd.Series(dtype=object)).dropna().unique())
+        | set(df_driver.get("Truck_Plate_Number", pd.Series(dtype=object)).dropna().unique())
+    )
 
-    kpi = pd.DataFrame(index=trucks)
-    kpi = kpi.join(arrival).join(start_loading).join(product)
+    # Expand to one row per (Truck_Plate_Number, Product_Group). If no product groups found for a truck,
+    # still include a row with Product_Group = NaN so that truck-level metrics are visible.
+    rows = []
+    for truck in trucks:
+        pset = sorted(prod_sets.get(truck, []))
+        if pset:
+            for pg in pset:
+                rows.append({"Truck_Plate_Number": truck, "Product_Group": pg})
+        else:
+            rows.append({"Truck_Plate_Number": truck, "Product_Group": np.nan})
+
+    kpi = pd.DataFrame(rows)
+
+    # Join truck-level Arrival onto kpi by Truck_Plate_Number
+    if not arrival.empty:
+        kpi = kpi.merge(arrival.reset_index(), on="Truck_Plate_Number", how="left")
+    else:
+        kpi = kpi.merge(pd.DataFrame(columns=["Truck_Plate_Number", "Arrival_Time"]), on="Truck_Plate_Number", how="left")
+
+    # Join product-specific Start_Loading onto kpi by Truck_Plate_Number + Product_Group
+    if not start_loading_prod.empty:
+        kpi = kpi.merge(start_loading_prod, on=["Truck_Plate_Number", "Product_Group"], how="left")
+    else:
+        kpi = kpi.merge(pd.DataFrame(columns=["Truck_Plate_Number", "Product_Group", "Start_Loading_Time"]), on=["Truck_Plate_Number", "Product_Group"], how="left")
+
+    # For transparency, also keep a product-from-status hint (first seen) per truck if needed elsewhere
+    # but we keep kpi rows per product group for display/weight merging.
 
     # Join some helpers for transparency (first security ts on that date, last logistic ts on that date)
     if not security_for_date.empty:
-        first_sec = security_for_date.groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_min).rename("First_Security_Timestamp")
-        kpi = kpi.join(first_sec)
+        first_sec = security_for_date.groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_min).rename("First_Security_Timestamp").reset_index()
     else:
-        kpi = kpi.join(df_security.groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_min).rename("First_Security_Timestamp"))
+        first_sec = df_security.groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_min).rename("First_Security_Timestamp").reset_index()
+    kpi = kpi.merge(first_sec, on="Truck_Plate_Number", how="left")
 
     if not logistic_for_date.empty:
-        logistic_last = logistic_for_date.groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_max).rename("Logistic_Last_Timestamp")
-        kpi = kpi.join(logistic_last)
+        logistic_last = logistic_for_date.groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_max).rename("Logistic_Last_Timestamp").reset_index()
     else:
-        kpi = kpi.join(df_logistic.groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_max).rename("Logistic_Last_Timestamp"))
+        logistic_last = df_logistic.groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_max).rename("Logistic_Last_Timestamp").reset_index()
+    kpi = kpi.merge(logistic_last, on="Truck_Plate_Number", how="left")
 
-    # --- Determine Completed_Time with date-aware logic ---
-    end_times = {}
-    for truck in kpi.index:
-        start_ts = kpi.at[truck, "Start_Loading_Time"] if "Start_Loading_Time" in kpi.columns else pd.NaT
+    # --- Determine Completed_Time with date-aware logic per (truck, product) row ---
+    # Build a map of start times per (truck, product)
+    start_map = {}
+    if not start_loading_prod.empty:
+        for _, r in start_loading_prod.iterrows():
+            start_map[(r["Truck_Plate_Number"], r["Product_Group"])] = r["Start_Loading_Time"]
+
+    end_times = []
+    for _, row in kpi.iterrows():
+        truck = row.get("Truck_Plate_Number")
+        prod = row.get("Product_Group")
         chosen_end = pd.NaT
 
-        comp_list = completed_grouped.get(truck, [])
+        comp_list = completed_grouped.get((truck, prod), [])
+        start_ts = start_map.get((truck, prod), pd.NaT)
+
         if len(comp_list) > 0:
             if pd.notna(start_ts):
                 ge = [t for t in comp_list if t >= start_ts]
@@ -125,12 +176,17 @@ def compute_per_truck_metrics(
 
         # fallback to logistic_last_ts on the date if allowed
         if pd.isna(chosen_end) and use_fallbacks:
-            if pd.notna(kpi.at[truck, "Logistic_Last_Timestamp"]):
-                chosen_end = kpi.at[truck, "Logistic_Last_Timestamp"]
+            ll = logistic_last[logistic_last["Truck_Plate_Number"] == truck]["Logistic_Last_Timestamp"]
+            if not ll.empty and pd.notna(ll.iloc[0]):
+                chosen_end = ll.iloc[0]
 
-        end_times[truck] = chosen_end
+        end_times.append({"Truck_Plate_Number": truck, "Product_Group": prod, "Completed_Time": chosen_end})
 
-    kpi["Completed_Time"] = pd.Series(end_times, name="Completed_Time")
+    completed_df = pd.DataFrame(end_times)
+    if not completed_df.empty:
+        kpi = kpi.merge(completed_df, on=["Truck_Plate_Number", "Product_Group"], how="left")
+    else:
+        kpi["Completed_Time"] = pd.NaT
 
     # --- DURATION CALCULATIONS (your rules) ---
 
@@ -176,6 +232,7 @@ def compute_per_truck_metrics(
     kpi["Total_min"] = kpi.apply(compute_total, axis=1)
 
 
+
     # --- Date attribution: prefer Arrival_Time.date, else Start_Loading_Time.date, else Completed_Time.date
     def derive_date(row):
         for c in ["Arrival_Time", "Start_Loading_Time", "Completed_Time"]:
@@ -208,8 +265,17 @@ def compute_per_truck_metrics(
         return ";".join(missing) if missing else "OK"
 
     kpi["Data_Quality_Flag"] = kpi.apply(quality_flag, axis=1)
-
-    kpi = kpi.reset_index()
+    # normalize column names (strip accidental whitespace/newlines)
+    try:
+        kpi.columns = kpi.columns.str.strip()
+    except Exception:
+        kpi.columns = [c.strip() if isinstance(c, str) else c for c in kpi.columns]
+    # Normalize any internal whitespace/newlines within column names to single spaces
+    try:
+        import re
+        kpi.columns = [re.sub(r"\s+", " ", c).strip() if isinstance(c, str) else c for c in kpi.columns]
+    except Exception:
+        pass
 
     # Apply filters:
     #  - selected_date: keep only rows with Date == selected_date (if provided)
@@ -223,8 +289,22 @@ def compute_per_truck_metrics(
     # upload_type (from security first-known)
     if upload_type:
         if "Coming_to_Load_or_Unload" in df_security.columns:
-            sec_map = df_security.groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"].agg("first")
-            kpi = kpi.join(sec_map, on="Truck_Plate_Number")
+            # Prefer security records from the selected date (if provided) so we filter by
+            # the action that occurred on that date for the truck (Loading vs Unloading).
+            if selected_date is not None and not security_for_date.empty:
+                sec = security_for_date.copy()
+                if "Timestamp" in sec.columns:
+                    sec["_Date"] = pd.to_datetime(sec["Timestamp"], errors="coerce").dt.date
+                else:
+                    sec["_Date"] = None
+                sec_map = sec.groupby(["Truck_Plate_Number", "_Date"])["Coming_to_Load_or_Unload"].agg("first").reset_index().rename(columns={"_Date": "Date"})
+                # Merge on Truck + Date for accurate per-day filtering
+                kpi = kpi.merge(sec_map, on=["Truck_Plate_Number", "Date"], how="left")
+            else:
+                # Fallback: use first-known security state per truck (historic)
+                sec_map = df_security.groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"].agg("first").reset_index()
+                kpi = kpi.merge(sec_map, on="Truck_Plate_Number", how="left")
+
             kpi = kpi[kpi["Coming_to_Load_or_Unload"] == upload_type]
 
     # Select columns and order for display

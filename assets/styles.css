@@ -1,0 +1,92 @@
+/* assets/styles.css - compact layout for Streamlit dashboard */
+:root {
+  --compact-padding: 6px;
+  --compact-margin: 10px;
+}
+
+/* Page container padding */
+.block-container {
+  padding-top: var(--compact-padding) !important;
+  padding-bottom: var(--compact-padding) !important;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+}
+
+/* Title and headers */
+h1, h2, h3 {
+  margin-top: var(--compact-margin) !important;
+  margin-bottom: var(--compact-margin) !important;
+  line-height: 1.05 !important;
+}
+
+/* Reduce spacing around metrics and markdown */
+.stMetric, .stMetricLabel, .stMetricValue {
+  padding: 4px 6px !important;
+  margin: 0 !important;
+}
+
+/* Streamlit divider and hr spacing */
+hr, .css-ffhzg2 { margin: 6px 0 !important; }
+
+/* Dataframe/table compact rows - best-effort selectors (Streamlit classnames change across versions) */
+div[data-testid="stDataFrame"] table tbody tr td {
+  padding: 6px 8px !important;
+}
+
+/* Sidebar adjustments */
+.css-1lcbmhc .block-container, .css-1lcbmhc {
+  padding-top: 6px !important;
+}
+
+/* Small font for compactness if desired */
+/* body { font-size: 14px; } */
+
+/* Status summary cards */
+.summary-cards {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  margin: 6px 0 12px 0;
+}
+.summary-card {
+  background: #ffffffcc;
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-shadow: 0 1px 2px rgba(16,24,40,0.03);
+  min-width: 160px;
+}
+.summary-label {
+  color: #6b7280;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.summary-number {
+  font-size: 28px;
+  font-weight: 600;
+  color: #111827;
+}
+.summary-card .summary-extra {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 6px;
+}
+
+/* Colored variants for status summary cards */
+.summary-card.waiting {
+  background: linear-gradient(180deg, rgba(254,226,226,0.95), rgba(255,250,250,0.95));
+  border-left: 6px solid #ef4444; /* red */
+}
+.summary-card.start-loading {
+  background: linear-gradient(180deg, rgba(219,234,254,0.95), rgba(250,252,255,0.95));
+  border-left: 6px solid #3b82f6; /* blue */
+}
+.summary-card.completed {
+  background: linear-gradient(180deg, rgba(220,252,231,0.95), rgba(250,255,250,0.95));
+  border-left: 6px solid #10b981; /* green */
+}
+
+.summary-card .summary-number {
+  /* Slightly stronger color on colored cards */
+  color: #111827;
+}

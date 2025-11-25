@@ -4,7 +4,7 @@ import pandas as pd
 from config.config import LOCAL_TZ
 
 
-def show_current_waiting(df_security, df_status, df_driver, product_filter=None, upload_type=None, selected_date=None):
+def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, product_filter=None, upload_type=None, selected_date=None):
     """
     Show trucks currently waiting.
     A truck is considered waiting if:
@@ -82,6 +82,35 @@ def show_current_waiting(df_security, df_status, df_driver, product_filter=None,
         )
         waiting = waiting.join(prod_map.rename("Product_Group"), how="left")
 
+    # --- Merge Total_Weight_MT from logistic (per Truck + Product + Date) if provided ---
+    if df_logistic is not None and "Total_Weight_MT" in df_logistic.columns:
+        lf = df_logistic.copy()
+        if "Timestamp" in lf.columns:
+            lf["Timestamp"] = pd.to_datetime(lf["Timestamp"], errors="coerce")
+            lf["_Date"] = lf["Timestamp"].dt.date
+        else:
+            lf["_Date"] = None
+
+        if "Product_Group" in lf.columns:
+            weight_map = (
+                lf.groupby(["Truck_Plate_Number", "Product_Group", "_Date"], dropna=False)["Total_Weight_MT"]
+                .sum()
+                .reset_index()
+                .rename(columns={"_Date": "Date"})
+            )
+            # ensure waiting has Date column
+            if "Date" not in waiting.columns:
+                waiting["Date"] = pd.to_datetime(waiting["Arrival_Time"], errors="coerce").dt.date
+
+            waiting = waiting.reset_index().merge(
+                weight_map,
+                on=["Truck_Plate_Number", "Product_Group", "Date"],
+                how="left"
+            ).set_index("Truck_Plate_Number")
+            # ensure column exists
+            if "Total_Weight_MT" not in waiting.columns:
+                waiting["Total_Weight_MT"] = None
+
     # --- Apply Filters ---
     if product_filter:
         waiting = waiting[waiting["Product_Group"].isin(product_filter)]
@@ -99,14 +128,19 @@ def show_current_waiting(df_security, df_status, df_driver, product_filter=None,
     if "Coming_to_Load_or_Unload" in waiting.columns:
         waiting = waiting.rename(columns={"Coming_to_Load_or_Unload": "Coming_to_load_or_Unload"})
 
+    # --- Attach Date for merging weights ---
+    if "Arrival_Time" in waiting.columns:
+        waiting["Date"] = pd.to_datetime(waiting["Arrival_Time"], errors="coerce").dt.date
+
     display_cols = [
         "Product_Group",
         "Coming_to_load_or_Unload",
         "Truck_Plate_Number",
+        "Phone_Number",
+        "Total_Weight_MT",
         "Arrival_Time",
         "Waiting_min",
         "Driver_Name",
-        "Phone_Number",
     ]
 
     # Final safety: only show columns that exist
@@ -129,10 +163,14 @@ def show_current_waiting(df_security, df_status, df_driver, product_filter=None,
 
     # --- Display ---
     st.subheader("Current Waiting Trucks")
-    st.dataframe(
-        waiting[display_cols]
-            .sort_values("Waiting_min", ascending=False)
-            .reset_index(drop=True),
-        hide_index=True
-    )
+    df_view = waiting[display_cols].sort_values("Waiting_min", ascending=False).reset_index(drop=True)
+    n_rows = len(df_view)
+    if n_rows > 5:
+        row_h = 40
+        header_h = 40
+        height = header_h + row_h * 5
+        st.dataframe(df_view, hide_index=True, height=height)
+    else:
+        st.dataframe(df_view, hide_index=True)
+
 
