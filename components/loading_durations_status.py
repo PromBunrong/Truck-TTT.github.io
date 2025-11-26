@@ -255,12 +255,4 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
     
     # Style and display
     styled_df = df_display.style.apply(highlight_invalid_rows, axis=1)
-    
-    # If more than 5 rows, give a fixed height so the table becomes scrollable
-    if n_rows > 5:
-        row_h = 40
-        header_h = 40
-        height = header_h + row_h * 5
-        st.dataframe(styled_df, hide_index=True, height=height)
-    else:
-        st.dataframe(styled_df, hide_index=True)
+    st.dataframe(styled_df, hide_index=True, use_container_width=True)

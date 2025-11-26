@@ -64,8 +64,17 @@ def compute_per_truck_metrics(
     driver_for_date = _filter_by_date(df_driver, selected_date)
 
     # ---- Compute primary events using rows FROM THE SELECTED DATE only ----
-    # Arrival: earliest Arrival event on that date
-    arrival = status_for_date[status_for_date["Status"] == "Arrival"].groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_min).rename("Arrival_Time")
+    # Arrival: For multi-product visits, get arrival per TRUCK+PRODUCT (not just per truck)
+    # This allows each product group to have its own arrival timestamp
+    arrival_all = status_for_date[status_for_date["Status"] == "Arrival"].copy()
+    if not arrival_all.empty and "Product_Group" in arrival_all.columns:
+        # Group by Truck + Product to get earliest arrival per product
+        arrival_prod = arrival_all.groupby(["Truck_Plate_Number", "Product_Group"])["Timestamp"].agg(_safe_min).rename("Arrival_Time").reset_index()
+    else:
+        # Fallback: arrival per truck only if no product info
+        arrival_prod = status_for_date[status_for_date["Status"] == "Arrival"].groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_min).rename("Arrival_Time").reset_index()
+        if not arrival_prod.empty:
+            arrival_prod["Product_Group"] = None
 
     # Start loading: earliest Start_Loading event on that date PER TRUCK+PRODUCT
     start_loading_prod = status_for_date[status_for_date["Status"] == "Start_Loading"].copy()
@@ -120,11 +129,11 @@ def compute_per_truck_metrics(
 
     kpi = pd.DataFrame(rows)
 
-    # Join truck-level Arrival onto kpi by Truck_Plate_Number
-    if not arrival.empty:
-        kpi = kpi.merge(arrival.reset_index(), on="Truck_Plate_Number", how="left")
+    # Join product-specific Arrival onto kpi by Truck_Plate_Number + Product_Group
+    if not arrival_prod.empty:
+        kpi = kpi.merge(arrival_prod, on=["Truck_Plate_Number", "Product_Group"], how="left")
     else:
-        kpi = kpi.merge(pd.DataFrame(columns=["Truck_Plate_Number", "Arrival_Time"]), on="Truck_Plate_Number", how="left")
+        kpi["Arrival_Time"] = pd.NaT
 
     # Join product-specific Start_Loading onto kpi by Truck_Plate_Number + Product_Group
     if not start_loading_prod.empty:

@@ -219,8 +219,4 @@ def show_daily_performance(dfs, selected_date, product_selected, upload_type):
 
     # Sort and display
     df_view = agg[cols].sort_values(["Product_Group", "Coming_to_Load_or_Unload"]).reset_index(drop=True)
-    n_rows = len(df_view)
-    if n_rows > 5:
-        st.dataframe(df_view, hide_index=True, use_container_width=True, height=150)
-    else:
-        st.dataframe(df_view, hide_index=True, use_container_width=True)
+    st.dataframe(df_view, hide_index=True, use_container_width=True)

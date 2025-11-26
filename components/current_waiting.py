@@ -169,13 +169,6 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
     # --- Display ---
     st.subheader("Current Waiting Trucks")
     df_view = waiting[display_cols].sort_values("Waiting_min", ascending=False).reset_index(drop=True)
-    n_rows = len(df_view)
-    if n_rows > 5:
-        row_h = 40
-        header_h = 40
-        height = header_h + row_h * 5
-        st.dataframe(df_view, hide_index=True, height=height)
-    else:
-        st.dataframe(df_view, hide_index=True)
+    st.dataframe(df_view, hide_index=True, use_container_width=True)
 
 
