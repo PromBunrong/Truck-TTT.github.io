@@ -221,9 +221,6 @@ def show_daily_performance(dfs, selected_date, product_selected, upload_type):
     df_view = agg[cols].sort_values(["Product_Group", "Coming_to_Load_or_Unload"]).reset_index(drop=True)
     n_rows = len(df_view)
     if n_rows > 5:
-        row_h = 40
-        header_h = 40
-        height = header_h + row_h * 5
-        st.dataframe(df_view, hide_index=True, height=height)
+        st.dataframe(df_view, hide_index=True, use_container_width=True, height=150)
     else:
-        st.dataframe(df_view, hide_index=True)
+        st.dataframe(df_view, hide_index=True, use_container_width=True)
