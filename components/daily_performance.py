@@ -186,10 +186,10 @@ def show_daily_performance(dfs, selected_date, product_selected, upload_type):
     
     agg["Loading_Rate_MT/Hour"] = agg.apply(compute_mt_per_hour_daily, axis=1)
     
-    # Round rates
-    for col in ["Loading_Rate_min/MT", "Loading_Rate_MT/Hour"]:
+    # Round rates to 2 decimal places
+    for col in ["Loading_Rate_min/MT", "Loading_Rate_MT/Hour", "Total_weight_MT", "Total_Loading_min"]:
         if col in agg.columns:
-            agg[col] = pd.to_numeric(agg[col], errors="coerce").round(3)
+            agg[col] = pd.to_numeric(agg[col], errors="coerce").round(2)
 
     # ---------------------------------------------------------------------
     # --- Filter by upload_type after aggregation ---

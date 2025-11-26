@@ -132,6 +132,11 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
     if "Arrival_Time" in waiting.columns:
         waiting["Date"] = pd.to_datetime(waiting["Arrival_Time"], errors="coerce").dt.date
 
+    # Round numeric columns to 2 decimal places
+    for col in ["Total_Weight_MT", "Waiting_min"]:
+        if col in waiting.columns:
+            waiting[col] = pd.to_numeric(waiting[col], errors="coerce").round(2)
+
     display_cols = [
         "Product_Group",
         "Coming_to_load_or_Unload",

@@ -112,7 +112,8 @@ show_status_summary(
     dfs['status'],
     product_filter=sb["product_selected"],
     upload_type=sb["upload_type"],
-    selected_date=sb["selected_date"]
+    selected_date=sb["selected_date"],
+    df_logistic=dfs.get('logistic')
 )
 st.divider()
 

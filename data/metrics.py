@@ -195,6 +195,41 @@ def compute_per_truck_metrics(
             return None
         return (end - start) / pd.Timedelta(minutes=1)
 
+    # Validation: Check if timestamps are in correct order
+    # Correct order: Arrival < Start_Loading < Completed
+    def validate_order(row):
+        """
+        Returns tuple: (is_valid, error_type)
+        is_valid: True if order is correct, False otherwise
+        error_type: Description of the error if invalid
+        """
+        arrival = row.get("Arrival_Time")
+        start = row.get("Start_Loading_Time")
+        completed = row.get("Completed_Time")
+        
+        # If all are missing, no validation error
+        if pd.isna(arrival) and pd.isna(start) and pd.isna(completed):
+            return True, None
+        
+        # Check all possible wrong orders
+        if pd.notna(completed) and pd.notna(start):
+            if completed < start:
+                return False, "Completed before Start Loading"
+        
+        if pd.notna(completed) and pd.notna(arrival):
+            if completed < arrival:
+                return False, "Completed before Arrival"
+        
+        if pd.notna(start) and pd.notna(arrival):
+            if start < arrival:
+                return False, "Start Loading before Arrival"
+        
+        return True, None
+
+    # Apply validation
+    validation_results = kpi.apply(validate_order, axis=1, result_type='expand')
+    kpi["Is_Valid_Order"] = validation_results[0]
+    kpi["Order_Error"] = validation_results[1]
 
     # 1) Waiting_min = ABS(time difference)
     kpi["Waiting_min"] = kpi.apply(
@@ -312,7 +347,7 @@ def compute_per_truck_metrics(
         "Truck_Plate_Number", "Product_Group", "Date",
         "Arrival_Time", "Start_Loading_Time", "Completed_Time",
         "Waiting_min", "Loading_min", "Total_min",
-        "Data_Quality_Flag"
+        "Data_Quality_Flag", "Is_Valid_Order", "Order_Error"
     ]
     existing_cols = [c for c in display_cols if c in kpi.columns]
     return kpi[existing_cols].sort_values(["Product_Group", "Date", "Truck_Plate_Number"])

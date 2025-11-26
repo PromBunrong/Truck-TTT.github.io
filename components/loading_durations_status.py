@@ -100,6 +100,41 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
         # No logistic data to map, create column
         df_kpi["Total_Weight_MT"] = None
 
+    # --- Add Outbound_Delivery_No from logistic sheet ---
+    delivery_map = None
+    if "Outbound_Delivery_No" in df_logistic.columns and "Truck_Plate_Number" in df_logistic.columns:
+        # Ensure _Date exists (was created above when building weight_map)
+        if "_Date" not in df_logistic.columns:
+            if "Timestamp" in df_logistic.columns:
+                df_logistic["Timestamp"] = pd.to_datetime(df_logistic["Timestamp"], errors="coerce")
+                df_logistic["_Date"] = df_logistic["Timestamp"].dt.date
+            else:
+                df_logistic["_Date"] = None
+        
+        # Build delivery map per Truck + Product + Date (take first non-null if multiple)
+        if "Product_Group" in df_logistic.columns:
+            delivery_map = (
+                df_logistic
+                .groupby(["Truck_Plate_Number", "Product_Group", "_Date"], dropna=False)["Outbound_Delivery_No"]
+                .agg(lambda s: s.dropna().iloc[0] if not s.dropna().empty else None)
+                .reset_index()
+                .rename(columns={"_Date": "Date"})
+            )
+            # Convert Date to proper type
+            if delivery_map["Date"].isnull().any():
+                delivery_map["Date"] = delivery_map["Date"].where(~delivery_map["Date"].isnull(), None)
+    
+    if delivery_map is not None:
+        if "Date" not in df_kpi.columns:
+            df_kpi["Date"] = None
+        df_kpi = df_kpi.merge(
+            delivery_map,
+            on=["Truck_Plate_Number", "Product_Group", "Date"],
+            how="left"
+        )
+    else:
+        df_kpi["Outbound_Delivery_No"] = None
+
     # --- Add Phone_Number (prefer driver table, fallback to security) ---
     phone_map = None
     if "Phone_Number" in df_driver.columns and "Truck_Plate_Number" in df_driver.columns:
@@ -140,20 +175,21 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
             return None
 
     df_kpi["Loading_Rate_MT/Hour"] = df_kpi.apply(compute_mt_per_hour, axis=1)
-    # Nicely round numeric rates
-    for col in ["Loading_Rate_min/MT", "Loading_Rate_MT/Hour"]:
+    # Nicely round numeric rates to 2 decimal places
+    for col in ["Loading_Rate_min/MT", "Loading_Rate_MT/Hour", "Waiting_min", "Loading_min", "Total_Weight_MT"]:
         if col in df_kpi.columns:
-            df_kpi[col] = pd.to_numeric(df_kpi[col], errors="coerce").round(3)
+            df_kpi[col] = pd.to_numeric(df_kpi[col], errors="coerce").round(2)
 
     # Add Mission column
     df_kpi["Mission"] = df_kpi.apply(_compute_mission, axis=1)
 
     # Reorder columns for display (adjust as you prefer)
     display_cols = [
+        "Date",
         "Product_Group",
         "Truck_Plate_Number",
+        "Outbound_Delivery_No",
         "Phone_Number",
-        "Date",
         "Arrival_Time",
         "Start_Loading_Time",
         "Completed_Time",
@@ -163,10 +199,13 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
         "Loading_Rate_min/MT",
         "Loading_Rate_MT/Hour",
         "Mission",
+        "Is_Valid_Order",
+        "Order_Error"
     ]
     display_cols = [c for c in display_cols if c in df_kpi.columns]
 
-    # --- Format timestamp columns to show ONLY time (if datetime)
+    # --- Format timestamp columns to show ONLY time (if datetime) ---
+    # IMPORTANT: Do this AFTER rounding numeric columns
     time_cols = ["Arrival_Time", "Start_Loading_Time", "Completed_Time"]
     for c in time_cols:
         if c in df_kpi.columns:
@@ -174,14 +213,54 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
             df_kpi[c] = pd.to_datetime(df_kpi[c], errors="coerce").dt.time.apply(lambda t: t.strftime("%H:%M:%S") if pd.notna(t) else None)
 
     st.subheader("Loading Durations Status")
-    # Sort and display, hide index
+    
+    # Sort and prepare display
     df_view = df_kpi[display_cols].sort_values(["Product_Group", "Date", "Truck_Plate_Number"]).reset_index(drop=True)
-    n_rows = len(df_view)
+    
+    # Check if there are any validation errors
+    has_errors = False
+    error_count = 0
+    if "Is_Valid_Order" in df_view.columns:
+        has_errors = (~df_view["Is_Valid_Order"]).any()
+        error_count = (~df_view["Is_Valid_Order"]).sum()
+        if has_errors:
+            st.warning(f"⚠️ {error_count} entries have incorrect timestamp order (highlighted in red)")
+    
+    # Remove validation columns from display (but keep them for styling reference)
+    display_cols_final = [c for c in display_cols if c not in ["Is_Valid_Order", "Order_Error"]]
+    
+    # Create display dataframe
+    df_display = df_view[display_cols_final].copy()
+    
+    # Format numeric columns to 2 decimal places in display
+    numeric_cols = ["Waiting_min", "Loading_min", "Total_Weight_MT", "Loading_Rate_min/MT", "Loading_Rate_MT/Hour"]
+    for col in numeric_cols:
+        if col in df_display.columns:
+            df_display[col] = df_display[col].apply(lambda x: f"{x:.2f}" if pd.notna(x) and isinstance(x, (int, float)) else x)
+    
+    # Add error flag column at the beginning if there are errors
+    if has_errors and "Order_Error" in df_view.columns:
+        df_display.insert(0, "⚠️ Error", df_view["Order_Error"].fillna(""))
+    
+    # Apply styling for invalid rows using the original df_view with validation columns
+    def highlight_invalid_rows(row):
+        # Get the corresponding validation status from df_view
+        idx = row.name
+        if idx < len(df_view) and "Is_Valid_Order" in df_view.columns:
+            if df_view.loc[idx, "Is_Valid_Order"] == False:
+                return ['background-color: #ffcccc; font-weight: bold;'] * len(row)  # Red background and bold text
+        return [''] * len(row)
+    
+    n_rows = len(df_display)
+    
+    # Style and display
+    styled_df = df_display.style.apply(highlight_invalid_rows, axis=1)
+    
     # If more than 5 rows, give a fixed height so the table becomes scrollable
     if n_rows > 5:
         row_h = 40
         header_h = 40
         height = header_h + row_h * 5
-        st.dataframe(df_view, hide_index=True, height=height)
+        st.dataframe(styled_df, hide_index=True, height=height)
     else:
-        st.dataframe(df_view, hide_index=True)
+        st.dataframe(styled_df, hide_index=True)
