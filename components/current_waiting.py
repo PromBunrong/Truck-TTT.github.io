@@ -132,6 +132,38 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
     if "Arrival_Time" in waiting.columns:
         waiting["Date"] = pd.to_datetime(waiting["Arrival_Time"], errors="coerce").dt.date
 
+    # --- Add Outbound_Delivery_No from logistic sheet ---
+    if df_logistic is not None and not df_logistic.empty:
+        if "Outbound_Delivery_No" in df_logistic.columns and "Truck_Plate_Number" in df_logistic.columns:
+            # Ensure _Date exists in logistic
+            if "_Date" not in df_logistic.columns:
+                if "Timestamp" in df_logistic.columns:
+                    df_logistic["Timestamp"] = pd.to_datetime(df_logistic["Timestamp"], errors="coerce")
+                    df_logistic["_Date"] = df_logistic["Timestamp"].dt.date
+                else:
+                    df_logistic["_Date"] = None
+            
+            # Build delivery map per Truck + Product + Date
+            if "Product_Group" in df_logistic.columns:
+                delivery_map = (
+                    df_logistic
+                    .groupby(["Truck_Plate_Number", "Product_Group", "_Date"], dropna=False)["Outbound_Delivery_No"]
+                    .agg(lambda s: s.dropna().iloc[0] if not s.dropna().empty else None)
+                    .reset_index()
+                    .rename(columns={"_Date": "Date"})
+                )
+                
+                # Merge with waiting trucks
+                if "Date" in waiting.columns:
+                    waiting = waiting.merge(
+                        delivery_map,
+                        on=["Truck_Plate_Number", "Product_Group", "Date"],
+                        how="left"
+                    )
+            
+            if "Outbound_Delivery_No" not in waiting.columns:
+                waiting["Outbound_Delivery_No"] = None
+
     # Round numeric columns to 2 decimal places
     for col in ["Total_Weight_MT", "Waiting_min"]:
         if col in waiting.columns:
@@ -141,10 +173,11 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
         "Product_Group",
         "Coming_to_load_or_Unload",
         "Truck_Plate_Number",
-        "Phone_Number",
+        "Outbound_Delivery_No",
         "Total_Weight_MT",
         "Arrival_Time",
         "Waiting_min",
+        "Phone_Number",
         "Driver_Name",
     ]
 
