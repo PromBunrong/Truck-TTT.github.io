@@ -81,6 +81,7 @@ product_map = {
     "ដែកសសៃ ដែកកង និង ដែក I & H": "Trading",
     "ស័ង្កសី": "Roofing",
     "ស័ង្កសី PU": "PU",
+    "សម្ភារៈសំណង់": "BM",
     "Other": "Other"
 }
 
