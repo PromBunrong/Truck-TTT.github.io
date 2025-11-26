@@ -10,7 +10,7 @@ ENVIRONMENT = os.getenv("APP_ENV", "local")
 SPREADSHEET_ID = "1KMpaAiTMAlWsGxLZaqrWJfIXL8ynUt5i0nfsja7mXWs"
 
 SHEET_GIDS = {
-    'security': "1814716377",
+    'security': "1337649065",
     'driver': "2019928657",
     'status': "1969607654",
     'logistic': "1027892338"
