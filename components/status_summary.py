@@ -4,10 +4,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-def show_status_summary(df_status, product_filter=None, upload_type=None, selected_date=None, df_logistic=None):
+def show_status_summary(df_status, product_filter=None, upload_type=None, selected_date=None, df_logistic=None, df_kpi=None):
     """
     Displays the count of trucks in each real-time status: Waiting, Start_Loading, Completed.
-    Uses the *latest* status per truck.
+    Uses the *latest* status per truck+product combination to support multi-product visits.
     """
 
     if df_status.empty or "Truck_Plate_Number" not in df_status.columns:
@@ -16,8 +16,11 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
 
     df_status["Timestamp"] = pd.to_datetime(df_status["Timestamp"], errors="coerce")
 
-    # Keep the latest record per truck
-    df_latest = df_status.sort_values("Timestamp").groupby("Truck_Plate_Number").last().reset_index()
+    # Keep the latest record per truck+product (for multi-product visits)
+    if "Product_Group" in df_status.columns:
+        df_latest = df_status.sort_values("Timestamp").groupby(["Truck_Plate_Number", "Product_Group"]).last().reset_index()
+    else:
+        df_latest = df_status.sort_values("Timestamp").groupby("Truck_Plate_Number").last().reset_index()
 
     # Optional filters
     if product_filter:
@@ -51,8 +54,8 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
 </div>
 """
 
-    # Layout: summary cards and gauge chart side by side
-    left_col, right_col = st.columns([1, 2])
+    # Layout: summary cards, gauge chart, and histogram
+    left_col, middle_col, right_col = st.columns([2, 1, 1])
     with left_col:
         st.markdown(card_html, unsafe_allow_html=True)
 
@@ -140,7 +143,88 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
         font={'color': "darkgray", 'family': "Arial"}
     )
     
-    with right_col:
+    with middle_col:
         st.plotly_chart(gauge_fig, use_container_width=True)
         # Show weight details below gauge chart
         st.markdown(f"<div style='text-align: center; margin-top: -15px; font-size: 0.85em;'>📦 Planned: {planned_weight:.1f} MT<br/>✅ Completed: {completed_weight:.1f} MT</div>", unsafe_allow_html=True)
+
+    # Create histogram for Loading_Rate_min/MT by product group
+    if df_kpi is not None and not df_kpi.empty and df_logistic is not None:
+        df_hist = df_kpi.copy()
+        
+        # Merge Total_Weight_MT from logistic if not present
+        if "Total_Weight_MT" not in df_hist.columns:
+            df_log = df_logistic.copy()
+            if "Timestamp" in df_log.columns:
+                df_log["Timestamp"] = pd.to_datetime(df_log["Timestamp"], errors="coerce")
+                df_log["_Date"] = df_log["Timestamp"].dt.date
+            else:
+                df_log["_Date"] = None
+            
+            if "Product_Group" in df_log.columns and "Truck_Plate_Number" in df_log.columns:
+                weight_map = (
+                    df_log.groupby(["Truck_Plate_Number", "Product_Group", "_Date"], dropna=False)["Total_Weight_MT"]
+                    .sum()
+                    .reset_index()
+                    .rename(columns={"_Date": "Date"})
+                )
+                
+                # Ensure Date column in df_hist
+                if "Date" not in df_hist.columns and "Arrival_Time" in df_hist.columns:
+                    df_hist["Date"] = pd.to_datetime(df_hist["Arrival_Time"], errors="coerce").dt.date
+                
+                df_hist = df_hist.merge(weight_map, on=["Truck_Plate_Number", "Product_Group", "Date"], how="left")
+        
+        # Calculate Loading_Rate_min/MT (same logic as loading_durations_status.py)
+        def calc_rate(row):
+            loading = row.get("Loading_min")
+            weight = row.get("Total_Weight_MT")
+            if pd.notna(loading) and pd.notna(weight) and weight > 0:
+                return loading / weight
+            return None
+        
+        df_hist["Loading_Rate_min/MT"] = df_hist.apply(calc_rate, axis=1)
+        
+        # Filter for valid data
+        df_hist = df_hist[df_hist["Loading_Rate_min/MT"].notna()]
+        
+        if not df_hist.empty and "Product_Group" in df_hist.columns:
+            # Create histogram
+            hist_fig = px.histogram(
+                df_hist,
+                x="Loading_Rate_min/MT",
+                color="Product_Group",
+                nbins=20,
+                title="Loading Rate Distribution",
+                labels={"Loading_Rate_min/MT": "Loading Rate (min/MT)"},
+                barmode="overlay",
+                opacity=0.7
+            )
+            
+            hist_fig.update_layout(
+                width=220,
+                height=150,
+                margin=dict(l=10, r=10, t=40, b=20),
+                paper_bgcolor="white",
+                font={'size': 10},
+                showlegend=True,
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=-0.5,
+                    xanchor="center",
+                    x=0.5,
+                    font={'size': 8}
+                ),
+                xaxis={'title': {'font': {'size': 10}}},
+                yaxis={'title': {'text': 'Count', 'font': {'size': 10}}}
+            )
+            
+            with right_col:
+                st.plotly_chart(hist_fig, use_container_width=True)
+        else:
+            with right_col:
+                st.info("No loading rate data")
+    else:
+        with right_col:
+            st.info("No data available")
