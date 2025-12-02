@@ -17,15 +17,17 @@ def compute_per_truck_metrics(
     df_logistic,
     df_driver,
     selected_date=None,
+    start_date=None,
+    end_date=None,
     product_filter=None,
     upload_type=None,
     use_fallbacks=False
 ):
     """
     Compute per-truck arrival/start/completed and durations.
-    If selected_date is provided (a date object), only events that occurred on that date
-    are used to compute Arrival/Start/Completed for the per-truck metrics. This avoids
-    old historical rows for the same truck plate interfering with today's metrics.
+    If selected_date is provided (a date object), only events on that date are used.
+    If start_date and end_date are provided, events within that range (inclusive) are used.
+    This avoids old historical rows interfering with metrics.
     """
 
     # Ensure Timestamp exists and is datetime
@@ -40,9 +42,9 @@ def compute_per_truck_metrics(
             except Exception:
                 pass
 
-    # If selected_date provided, filter status & logistic rows to that date for event selection
-    def _filter_by_date(df, date):
-        if date is None:
+    # Filter by date or date range
+    def _filter_by_date(df, single_date=None, start=None, end=None):
+        if single_date is None and start is None and end is None:
             return df.copy()
         if "Timestamp" not in df.columns:
             return df.iloc[0:0].copy()  # empty
@@ -56,12 +58,22 @@ def compute_per_truck_metrics(
                 dates = ts.dt.date
         except Exception:
             dates = ts.dt.date
-        return df[dates == date].copy()
+        
+        # Apply filter based on what's provided
+        if single_date is not None:
+            return df[dates == single_date].copy()
+        elif start is not None and end is not None:
+            return df[(dates >= start) & (dates <= end)].copy()
+        elif start is not None:
+            return df[dates >= start].copy()
+        elif end is not None:
+            return df[dates <= end].copy()
+        return df.copy()
 
-    status_for_date = _filter_by_date(df_status, selected_date)
-    logistic_for_date = _filter_by_date(df_logistic, selected_date)
-    security_for_date = _filter_by_date(df_security, selected_date)
-    driver_for_date = _filter_by_date(df_driver, selected_date)
+    status_for_date = _filter_by_date(df_status, selected_date, start_date, end_date)
+    logistic_for_date = _filter_by_date(df_logistic, selected_date, start_date, end_date)
+    security_for_date = _filter_by_date(df_security, selected_date, start_date, end_date)
+    driver_for_date = _filter_by_date(df_driver, selected_date, start_date, end_date)
 
     # ---- Compute primary events using rows FROM THE SELECTED DATE only ----
     # Arrival: For multi-product visits, get arrival per TRUCK+PRODUCT (not just per truck)
@@ -322,9 +334,17 @@ def compute_per_truck_metrics(
         pass
 
     # Apply filters:
-    #  - selected_date: keep only rows with Date == selected_date (if provided)
+    #  - Filter by date: single date or date range (if provided)
     if selected_date is not None:
         kpi = kpi[pd.to_datetime(kpi["Date"]).dt.date == selected_date]
+    elif start_date is not None or end_date is not None:
+        kpi_dates = pd.to_datetime(kpi["Date"]).dt.date
+        if start_date is not None and end_date is not None:
+            kpi = kpi[(kpi_dates >= start_date) & (kpi_dates <= end_date)]
+        elif start_date is not None:
+            kpi = kpi[kpi_dates >= start_date]
+        elif end_date is not None:
+            kpi = kpi[kpi_dates <= end_date]
 
     # product filter
     if product_filter:
@@ -335,7 +355,7 @@ def compute_per_truck_metrics(
         if "Coming_to_Load_or_Unload" in df_security.columns:
             # Prefer security records from the selected date (if provided) so we filter by
             # the action that occurred on that date for the truck (Loading vs Unloading).
-            if selected_date is not None and not security_for_date.empty:
+            if (selected_date is not None or start_date is not None or end_date is not None) and not security_for_date.empty:
                 sec = security_for_date.copy()
                 if "Timestamp" in sec.columns:
                     sec["_Date"] = pd.to_datetime(sec["Timestamp"], errors="coerce").dt.date

@@ -111,7 +111,8 @@ if DEBUG_MODE:
 from data.metrics import compute_per_truck_metrics
 df_kpi = compute_per_truck_metrics(
     dfs['security'], dfs['status'], dfs['logistic'], dfs['driver'],
-    selected_date=sb["selected_date"],
+    start_date=sb["start_date"],
+    end_date=sb["end_date"],
     product_filter=sb["product_selected"],
     upload_type=sb["upload_type"],
     use_fallbacks=False
@@ -122,7 +123,8 @@ show_status_summary(
     dfs['status'],
     product_filter=sb["product_selected"],
     upload_type=sb["upload_type"],
-    selected_date=sb["selected_date"],
+    start_date=sb["start_date"],
+    end_date=sb["end_date"],
     df_logistic=dfs.get('logistic'),
     df_kpi=df_kpi
 )
@@ -133,14 +135,16 @@ show_current_waiting(
     dfs['security'], dfs['status'], dfs['driver'], dfs.get('logistic'),
     product_filter=sb["product_selected"],
     upload_type=sb["upload_type"],
-    selected_date=sb["selected_date"]
+    start_date=sb["start_date"],
+    end_date=sb["end_date"]
 )
 st.divider()
 
 # 3️⃣ LOADING DURATIONS TABLE
 show_loading_durations_status(
     dfs,
-    selected_date=sb["selected_date"],
+    start_date=sb["start_date"],
+    end_date=sb["end_date"],
     product_selected=sb["product_selected"],
     upload_type=sb["upload_type"]
 )
@@ -149,7 +153,8 @@ st.divider()
 # 4️⃣ DAILY PERFORMANCE
 show_daily_performance(
     dfs,
-    selected_date=sb["selected_date"],
+    start_date=sb["start_date"],
+    end_date=sb["end_date"],
     product_selected=sb["product_selected"],
     upload_type=sb["upload_type"]
 )

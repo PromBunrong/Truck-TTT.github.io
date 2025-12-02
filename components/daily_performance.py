@@ -4,10 +4,11 @@ import pandas as pd
 from data.metrics import compute_per_truck_metrics
 
 
-def show_daily_performance(dfs, selected_date, product_selected, upload_type):
+def show_daily_performance(dfs, selected_date=None, start_date=None, end_date=None, product_selected=None, upload_type=None):
     """
     Daily performance aggregated by (Product_Group, Coming_to_load_or_Unload).
     Correct weight logic: Total_Weight_MT aggregated PER Truck + Product_Group + Date.
+    Supports both single date and date range filtering.
     """
 
     df_security = dfs['security']
@@ -22,6 +23,8 @@ def show_daily_performance(dfs, selected_date, product_selected, upload_type):
         df_logistic,
         df_driver,
         selected_date=selected_date,
+        start_date=start_date,
+        end_date=end_date,
         product_filter=product_selected,
         upload_type=upload_type,
         use_fallbacks=False

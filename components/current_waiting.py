@@ -4,11 +4,11 @@ import pandas as pd
 from config.config import LOCAL_TZ
 
 
-def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, product_filter=None, upload_type=None, selected_date=None):
+def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, product_filter=None, upload_type=None, selected_date=None, start_date=None, end_date=None):
     """
     Show trucks currently waiting.
     A truck is considered waiting if:
-        - On the SELECTED DATE
+        - On the SELECTED DATE or within DATE RANGE
         - Its LATEST status for that date = "Arrival"
         - No later "Start_Loading" or "Completed" record on that date
     Includes automatic cleanup of previous-day visits (same plate number).
@@ -25,9 +25,12 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
     except Exception:
         now = pd.Timestamp.now()
 
-    # If no date selected → use today
+    # Determine date filter - use end_date if range provided, otherwise use today
     if selected_date is None:
-        selected_date = now.date()
+        if end_date:
+            selected_date = end_date
+        else:
+            selected_date = now.date()
 
     # --- Ensure we only work with today's entries ---
     df_status["Date"] = df_status["Timestamp"].dt.date

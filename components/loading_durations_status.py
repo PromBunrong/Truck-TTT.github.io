@@ -22,11 +22,12 @@ def _compute_mission(row):
     return "Pending"  # fallback (shouldn't normally happen)
 
 
-def show_loading_durations_status(dfs, selected_date, product_selected, upload_type):
+def show_loading_durations_status(dfs, selected_date=None, start_date=None, end_date=None, product_selected=None, upload_type=None):
     """
     Display Loading Durations Status with Total_Weight_MT, Loading_Rate and Mission.
     Total_Weight_MT is aggregated per (Truck_Plate_Number, Product_Group, Date)
     to avoid summing weights across product groups or dates.
+    Supports both single date and date range filtering.
     """
     df_security = dfs['security']
     df_status = dfs['status']
@@ -37,6 +38,8 @@ def show_loading_durations_status(dfs, selected_date, product_selected, upload_t
     df_kpi = compute_per_truck_metrics(
         df_security, df_status, df_logistic, df_driver,
         selected_date=selected_date,
+        start_date=start_date,
+        end_date=end_date,
         product_filter=product_selected,
         upload_type=upload_type,
         use_fallbacks=False

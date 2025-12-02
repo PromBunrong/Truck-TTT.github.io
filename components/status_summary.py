@@ -4,10 +4,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-def show_status_summary(df_status, product_filter=None, upload_type=None, selected_date=None, df_logistic=None, df_kpi=None):
+def show_status_summary(df_status, product_filter=None, upload_type=None, selected_date=None, start_date=None, end_date=None, df_logistic=None, df_kpi=None):
     """
     Displays the count of trucks in each real-time status: Waiting, Start_Loading, Completed.
     Uses the *latest* status per truck+product combination to support multi-product visits.
+    Supports both single date (selected_date) and date range (start_date, end_date) filtering.
     """
 
     if df_status.empty or "Truck_Plate_Number" not in df_status.columns:
@@ -25,8 +26,18 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
     # Optional filters
     if product_filter:
         df_latest = df_latest[df_latest["Product_Group"].isin(product_filter)]
+    
+    # Date filtering - support both single date and date range
     if selected_date:
         df_latest = df_latest[pd.to_datetime(df_latest["Timestamp"]).dt.date == selected_date]
+    elif start_date or end_date:
+        df_dates = pd.to_datetime(df_latest["Timestamp"]).dt.date
+        if start_date and end_date:
+            df_latest = df_latest[(df_dates >= start_date) & (df_dates <= end_date)]
+        elif start_date:
+            df_latest = df_latest[df_dates >= start_date]
+        elif end_date:
+            df_latest = df_latest[df_dates <= end_date]
 
     # Count each status (use 0 defaults)
     waiting_count = int(df_latest[df_latest["Status"] == "Arrival"].shape[0]) if not df_latest.empty else 0
@@ -69,9 +80,18 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
         df_log = df_logistic.copy()
         if "Timestamp" in df_log.columns:
             df_log["Timestamp"] = pd.to_datetime(df_log["Timestamp"], errors="coerce")
+            df_log["_Date"] = df_log["Timestamp"].dt.date
+            
+            # Apply date filter
             if selected_date:
-                df_log["_Date"] = df_log["Timestamp"].dt.date
                 df_log = df_log[df_log["_Date"] == selected_date]
+            elif start_date or end_date:
+                if start_date and end_date:
+                    df_log = df_log[(df_log["_Date"] >= start_date) & (df_log["_Date"] <= end_date)]
+                elif start_date:
+                    df_log = df_log[df_log["_Date"] >= start_date]
+                elif end_date:
+                    df_log = df_log[df_log["_Date"] <= end_date]
         
         # Apply product filter if specified
         if product_filter and "Product_Group" in df_log.columns:
@@ -92,9 +112,18 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
             # Apply filters
             if product_filter and "Product_Group" in df_completed.columns:
                 df_completed = df_completed[df_completed["Product_Group"].isin(product_filter)]
+            
+            # Date filtering
+            df_completed["_Date"] = df_completed["Timestamp"].dt.date
             if selected_date:
-                df_completed["_Date"] = df_completed["Timestamp"].dt.date
                 df_completed = df_completed[df_completed["_Date"] == selected_date]
+            elif start_date or end_date:
+                if start_date and end_date:
+                    df_completed = df_completed[(df_completed["_Date"] >= start_date) & (df_completed["_Date"] <= end_date)]
+                elif start_date:
+                    df_completed = df_completed[df_completed["_Date"] >= start_date]
+                elif end_date:
+                    df_completed = df_completed[df_completed["_Date"] <= end_date]
             
             # Get unique truck+product combinations that have completed
             if "Product_Group" in df_completed.columns:
@@ -202,8 +231,8 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
                 x="Loading_Rate_min/MT",
                 color="Product_Group",
                 nbins=20,
-                title="Loading Rate Distribution",
-                labels={"Loading_Rate_min/MT": "Loading Rate (min/MT)"},
+                title="Loading Rate Distribution (min/MT)",
+                # labels={"Loading_Rate_min/MT": "Loading Rate (min/MT)"},
                 barmode="overlay",
                 opacity=0.7
             )
