@@ -107,13 +107,24 @@ if DEBUG_MODE:
 # ----------------------------------------------------
 # MAIN DASHBOARD SECTIONS
 # ----------------------------------------------------
+# Compute KPI metrics once for use in multiple sections
+from data.metrics import compute_per_truck_metrics
+df_kpi = compute_per_truck_metrics(
+    dfs['security'], dfs['status'], dfs['logistic'], dfs['driver'],
+    selected_date=sb["selected_date"],
+    product_filter=sb["product_selected"],
+    upload_type=sb["upload_type"],
+    use_fallbacks=False
+)
+
 # 1️⃣ STATUS SUMMARY
 show_status_summary(
     dfs['status'],
     product_filter=sb["product_selected"],
     upload_type=sb["upload_type"],
     selected_date=sb["selected_date"],
-    df_logistic=dfs.get('logistic')
+    df_logistic=dfs.get('logistic'),
+    df_kpi=df_kpi
 )
 st.divider()
 
