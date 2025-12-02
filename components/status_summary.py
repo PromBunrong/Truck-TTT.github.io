@@ -81,27 +81,34 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
         if "Total_Weight_MT" in df_log.columns:
             planned_weight = df_log["Total_Weight_MT"].sum()
         
-        # Find completed trucks from status
+        # Find completed trucks from status (trucks with Completed_Time, same logic as Mission="Done")
         if not df_status.empty:
             df_stat = df_status.copy()
             df_stat["Timestamp"] = pd.to_datetime(df_stat["Timestamp"], errors="coerce")
             
-            # Get latest status per truck
-            df_stat_latest = df_stat.sort_values("Timestamp").groupby("Truck_Plate_Number").last().reset_index()
+            # Get all records with Status = "Completed" (not just latest)
+            df_completed = df_stat[df_stat["Status"] == "Completed"].copy()
             
             # Apply filters
-            if product_filter and "Product_Group" in df_stat_latest.columns:
-                df_stat_latest = df_stat_latest[df_stat_latest["Product_Group"].isin(product_filter)]
+            if product_filter and "Product_Group" in df_completed.columns:
+                df_completed = df_completed[df_completed["Product_Group"].isin(product_filter)]
             if selected_date:
-                df_stat_latest["_Date"] = df_stat_latest["Timestamp"].dt.date
-                df_stat_latest = df_stat_latest[df_stat_latest["_Date"] == selected_date]
+                df_completed["_Date"] = df_completed["Timestamp"].dt.date
+                df_completed = df_completed[df_completed["_Date"] == selected_date]
             
-            # Get completed trucks
-            completed_trucks = df_stat_latest[df_stat_latest["Status"] == "Completed"]["Truck_Plate_Number"].unique()
-            
-            # Sum weight for completed trucks from logistic
-            if "Truck_Plate_Number" in df_log.columns and len(completed_trucks) > 0:
-                completed_weight = df_log[df_log["Truck_Plate_Number"].isin(completed_trucks)]["Total_Weight_MT"].sum()
+            # Get unique truck+product combinations that have completed
+            if "Product_Group" in df_completed.columns:
+                completed_pairs = df_completed[["Truck_Plate_Number", "Product_Group"]].drop_duplicates()
+                
+                # Merge with logistic to get weights for completed truck+product combinations
+                if "Truck_Plate_Number" in df_log.columns and "Product_Group" in df_log.columns and not completed_pairs.empty:
+                    df_log_with_completed = df_log.merge(completed_pairs, on=["Truck_Plate_Number", "Product_Group"], how="inner")
+                    completed_weight = df_log_with_completed["Total_Weight_MT"].sum()
+            else:
+                # Fallback if no Product_Group
+                completed_trucks = df_completed["Truck_Plate_Number"].unique()
+                if "Truck_Plate_Number" in df_log.columns and len(completed_trucks) > 0:
+                    completed_weight = df_log[df_log["Truck_Plate_Number"].isin(completed_trucks)]["Total_Weight_MT"].sum()
     
     # Calculate completion percentage
     completion_pct = 0
@@ -210,7 +217,7 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
                 showlegend=True,
                 legend=dict(
                     orientation="h",
-                    yanchor="bottom",
+                    yanchor="auto",
                     y=-0.5,
                     xanchor="center",
                     x=0.5,
