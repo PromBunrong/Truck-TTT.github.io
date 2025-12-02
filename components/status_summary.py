@@ -17,27 +17,29 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
 
     df_status["Timestamp"] = pd.to_datetime(df_status["Timestamp"], errors="coerce")
 
-    # Keep the latest record per truck+product (for multi-product visits)
-    if "Product_Group" in df_status.columns:
-        df_latest = df_status.sort_values("Timestamp").groupby(["Truck_Plate_Number", "Product_Group"]).last().reset_index()
-    else:
-        df_latest = df_status.sort_values("Timestamp").groupby("Truck_Plate_Number").last().reset_index()
+    # Filter by date FIRST (before grouping)
+    df_filtered = df_status.copy()
+    if selected_date:
+        df_filtered["Date"] = df_filtered["Timestamp"].dt.date
+        df_filtered = df_filtered[df_filtered["Date"] == selected_date]
+    elif start_date or end_date:
+        df_filtered["Date"] = df_filtered["Timestamp"].dt.date
+        if start_date and end_date:
+            df_filtered = df_filtered[(df_filtered["Date"] >= start_date) & (df_filtered["Date"] <= end_date)]
+        elif start_date:
+            df_filtered = df_filtered[df_filtered["Date"] >= start_date]
+        elif end_date:
+            df_filtered = df_filtered[df_filtered["Date"] <= end_date]
 
-    # Optional filters
+    # Keep the latest record per truck+product within the filtered date range
+    if "Product_Group" in df_filtered.columns:
+        df_latest = df_filtered.sort_values("Timestamp").groupby(["Truck_Plate_Number", "Product_Group"]).last().reset_index()
+    else:
+        df_latest = df_filtered.sort_values("Timestamp").groupby("Truck_Plate_Number").last().reset_index()
+
+    # Apply product filter
     if product_filter:
         df_latest = df_latest[df_latest["Product_Group"].isin(product_filter)]
-    
-    # Date filtering - support both single date and date range
-    if selected_date:
-        df_latest = df_latest[pd.to_datetime(df_latest["Timestamp"]).dt.date == selected_date]
-    elif start_date or end_date:
-        df_dates = pd.to_datetime(df_latest["Timestamp"]).dt.date
-        if start_date and end_date:
-            df_latest = df_latest[(df_dates >= start_date) & (df_dates <= end_date)]
-        elif start_date:
-            df_latest = df_latest[df_dates >= start_date]
-        elif end_date:
-            df_latest = df_latest[df_dates <= end_date]
 
     # Count each status (use 0 defaults)
     waiting_count = int(df_latest[df_latest["Status"] == "Arrival"].shape[0]) if not df_latest.empty else 0
