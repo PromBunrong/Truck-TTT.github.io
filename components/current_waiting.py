@@ -25,32 +25,48 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
     except Exception:
         now = pd.Timestamp.now()
 
-    # Determine date filter - use end_date if range provided, otherwise use today
-    if selected_date is None:
-        if end_date:
-            selected_date = end_date
-        else:
-            selected_date = now.date()
-
-    # --- Ensure we only work with today's entries ---
+    # --- Filter status by date or date range ---
     df_status["Date"] = df_status["Timestamp"].dt.date
-    status_today = df_status[df_status["Date"] == selected_date]
+    
+    if selected_date:
+        # Single date filter
+        status_filtered = df_status[df_status["Date"] == selected_date]
+    elif start_date or end_date:
+        # Date range filter
+        if start_date and end_date:
+            status_filtered = df_status[(df_status["Date"] >= start_date) & (df_status["Date"] <= end_date)]
+        elif start_date:
+            status_filtered = df_status[df_status["Date"] >= start_date]
+        elif end_date:
+            status_filtered = df_status[df_status["Date"] <= end_date]
+    else:
+        # No date filter - use today
+        today = now.date()
+        status_filtered = df_status[df_status["Date"] == today]
 
-    if status_today.empty:
+    if status_filtered.empty:
         st.subheader("Current Waiting Trucks")
-        st.info("No truck activity recorded on this date.")
+        st.info("No truck activity recorded for the selected date range.")
         return
 
-    # --- CLEANUP: Get latest status per truck for this date ---
-    latest_today = (
-        status_today.sort_values("Timestamp")
-        .groupby("Truck_Plate_Number")
-        .last()
-        .reset_index()
-    )
+    # --- CLEANUP: Get latest status per truck+product within the filtered date range ---
+    if "Product_Group" in status_filtered.columns:
+        latest_today = (
+            status_filtered.sort_values("Timestamp")
+            .groupby(["Truck_Plate_Number", "Product_Group"])
+            .last()
+            .reset_index()
+        )
+    else:
+        latest_today = (
+            status_filtered.sort_values("Timestamp")
+            .groupby("Truck_Plate_Number")
+            .last()
+            .reset_index()
+        )
 
     # Keep only those whose FINAL status today is "Arrival" (== still waiting)
-    waiting = latest_today[latest_today["Status"] == "Arrival"].set_index("Truck_Plate_Number")
+    waiting = latest_today[latest_today["Status"] == "Arrival"].copy()
 
     if waiting.empty:
         st.subheader("Current Waiting Trucks")
@@ -66,8 +82,9 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
             df_security.sort_values("Timestamp")
             .groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"]
             .last()
+            .reset_index()
         )
-        waiting = waiting.join(sec_map, how="left")
+        waiting = waiting.merge(sec_map, on="Truck_Plate_Number", how="left")
 
     # --- Merge Driver Info (latest record per truck) ---
     if "Truck_Plate_Number" in df_driver.columns:
@@ -75,15 +92,13 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
             df_driver.sort_values("Timestamp")
             .groupby("Truck_Plate_Number")
             .last()[["Driver_Name", "Phone_Number"]]
+            .reset_index()
         )
-        waiting = waiting.join(drv, how="left")
+        waiting = waiting.merge(drv, on="Truck_Plate_Number", how="left")
 
-    # --- Merge Product_Group (from latest status) ---
-    if "Product_Group" not in waiting.columns:
-        prod_map = df_status.groupby("Truck_Plate_Number")["Product_Group"].agg(
-            lambda s: s.dropna().iloc[0] if not s.dropna().empty else None
-        )
-        waiting = waiting.join(prod_map.rename("Product_Group"), how="left")
+    # --- Add Date column for merging ---
+    if "Date" not in waiting.columns:
+        waiting["Date"] = pd.to_datetime(waiting["Arrival_Time"], errors="coerce").dt.date
 
     # --- Merge Total_Weight_MT from logistic (per Truck + Product + Date) if provided ---
     if df_logistic is not None and "Total_Weight_MT" in df_logistic.columns:
@@ -94,25 +109,23 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
         else:
             lf["_Date"] = None
 
-        if "Product_Group" in lf.columns:
+        if "Product_Group" in lf.columns and "Product_Group" in waiting.columns:
             weight_map = (
                 lf.groupby(["Truck_Plate_Number", "Product_Group", "_Date"], dropna=False)["Total_Weight_MT"]
                 .sum()
                 .reset_index()
                 .rename(columns={"_Date": "Date"})
             )
-            # ensure waiting has Date column
-            if "Date" not in waiting.columns:
-                waiting["Date"] = pd.to_datetime(waiting["Arrival_Time"], errors="coerce").dt.date
-
-            waiting = waiting.reset_index().merge(
+            
+            waiting = waiting.merge(
                 weight_map,
                 on=["Truck_Plate_Number", "Product_Group", "Date"],
                 how="left"
-            ).set_index("Truck_Plate_Number")
-            # ensure column exists
-            if "Total_Weight_MT" not in waiting.columns:
-                waiting["Total_Weight_MT"] = None
+            )
+            
+        # ensure column exists
+        if "Total_Weight_MT" not in waiting.columns:
+            waiting["Total_Weight_MT"] = None
 
     # --- Apply Filters ---
     if product_filter:
@@ -124,16 +137,9 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
     # --- Compute correct Waiting time ---
     waiting["Waiting_min"] = (now - waiting["Arrival_Time"]) / pd.Timedelta(minutes=1)
 
-    # --- Reorder Columns ---
-    waiting = waiting.reset_index()
-
     # Rename for display
     if "Coming_to_Load_or_Unload" in waiting.columns:
         waiting = waiting.rename(columns={"Coming_to_Load_or_Unload": "Coming_to_load_or_Unload"})
-
-    # --- Attach Date for merging weights ---
-    if "Arrival_Time" in waiting.columns:
-        waiting["Date"] = pd.to_datetime(waiting["Arrival_Time"], errors="coerce").dt.date
 
     # --- Add Outbound_Delivery_No from logistic sheet ---
     if df_logistic is not None and not df_logistic.empty:
@@ -147,7 +153,7 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
                     df_logistic["_Date"] = None
             
             # Build delivery map per Truck + Product + Date
-            if "Product_Group" in df_logistic.columns:
+            if "Product_Group" in df_logistic.columns and "Product_Group" in waiting.columns:
                 delivery_map = (
                     df_logistic
                     .groupby(["Truck_Plate_Number", "Product_Group", "_Date"], dropna=False)["Outbound_Delivery_No"]
@@ -173,6 +179,7 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
             waiting[col] = pd.to_numeric(waiting[col], errors="coerce").round(2)
 
     display_cols = [
+        "Date",
         "Product_Group",
         "Coming_to_load_or_Unload",
         "Truck_Plate_Number",
