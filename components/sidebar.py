@@ -2,8 +2,14 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 from datetime import date, timedelta
+import os
 
 def render_sidebar(default_date, refresh_interval_seconds):
+    # Display logo at the top of sidebar
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ISI_logo.png")
+    if os.path.exists(logo_path):
+        st.sidebar.image(logo_path, use_container_width=True)
+    
     st.sidebar.title("Filters & Refresh")
 
     # Quick date selector
@@ -81,7 +87,7 @@ def render_sidebar(default_date, refresh_interval_seconds):
     upload_type = st.sidebar.selectbox("Loading / Unloading", options=["All", "Loading", "Unloading"], index=0)
 
     # Product groups (multi)
-    product_options = ["Pipe", "Coil", "Trading", "Roofing", "PU", "BM","Other"]
+    product_options = ["Pipe", "Coil KMH1", "Coil KMH2", "Trading", "Roofing", "PU", "CZD", "BM", "Other"]
     product_selected = st.sidebar.multiselect("Product Group", options=product_options, default=product_options)
 
     # compact info
