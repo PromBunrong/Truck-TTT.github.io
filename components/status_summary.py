@@ -4,11 +4,12 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-def show_status_summary(df_status, product_filter=None, upload_type=None, selected_date=None, start_date=None, end_date=None, df_logistic=None, df_kpi=None):
+def show_status_summary(df_status, df_security=None, product_filter=None, upload_type=None, selected_date=None, start_date=None, end_date=None, df_logistic=None, df_kpi=None):
     """
     Displays the count of trucks in each real-time status: Waiting, Start_Loading, Completed.
     Uses the *latest* status per truck+product combination to support multi-product visits.
     Supports both single date (selected_date) and date range (start_date, end_date) filtering.
+    Filters by Loading/Unloading type if upload_type is specified.
     """
 
     if df_status.empty or "Truck_Plate_Number" not in df_status.columns:
@@ -40,6 +41,22 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
     # Apply product filter
     if product_filter:
         df_latest = df_latest[df_latest["Product_Group"].isin(product_filter)]
+    
+    # Apply Loading/Unloading filter by merging with security data
+    if upload_type and df_security is not None and not df_security.empty:
+        if "Coming_to_Load_or_Unload" in df_security.columns and "Truck_Plate_Number" in df_security.columns:
+            # Get the latest Coming_to_Load_or_Unload per truck from security
+            df_security["Timestamp"] = pd.to_datetime(df_security["Timestamp"], errors="coerce")
+            sec_map = (
+                df_security.sort_values("Timestamp")
+                .groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"]
+                .last()
+                .reset_index()
+            )
+            # Merge with df_latest
+            df_latest = df_latest.merge(sec_map, on="Truck_Plate_Number", how="left")
+            # Filter by upload_type
+            df_latest = df_latest[df_latest["Coming_to_Load_or_Unload"] == upload_type]
 
     # Count each status (use 0 defaults)
     waiting_count = int(df_latest[df_latest["Status"] == "Arrival"].shape[0]) if not df_latest.empty else 0
@@ -98,6 +115,20 @@ def show_status_summary(df_status, product_filter=None, upload_type=None, select
         # Apply product filter if specified
         if product_filter and "Product_Group" in df_log.columns:
             df_log = df_log[df_log["Product_Group"].isin(product_filter)]
+        
+        # Apply Loading/Unloading filter by merging with security
+        if upload_type and df_security is not None and not df_security.empty:
+            if "Coming_to_Load_or_Unload" in df_security.columns and "Truck_Plate_Number" in df_security.columns:
+                df_security_temp = df_security.copy()
+                df_security_temp["Timestamp"] = pd.to_datetime(df_security_temp["Timestamp"], errors="coerce")
+                sec_map = (
+                    df_security_temp.sort_values("Timestamp")
+                    .groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"]
+                    .last()
+                    .reset_index()
+                )
+                df_log = df_log.merge(sec_map, on="Truck_Plate_Number", how="left")
+                df_log = df_log[df_log["Coming_to_Load_or_Unload"] == upload_type]
         
         # Calculate total planned weight from logistic sheet
         if "Total_Weight_MT" in df_log.columns:

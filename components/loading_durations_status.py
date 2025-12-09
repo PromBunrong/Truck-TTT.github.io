@@ -22,7 +22,7 @@ def _compute_mission(row):
     return "Pending"  # fallback (shouldn't normally happen)
 
 
-def show_loading_durations_status(dfs, selected_date=None, start_date=None, end_date=None, product_selected=None, upload_type=None):
+def show_loading_durations_status(dfs, selected_date=None, start_date=None, end_date=None, product_selected=None, upload_type=None, truck_condition=None):
     """
     Display Loading Durations Status with Total_Weight_MT, Loading_Rate and Mission.
     Total_Weight_MT is aggregated per (Truck_Plate_Number, Product_Group, Date)
@@ -150,6 +150,49 @@ def show_loading_durations_status(dfs, selected_date=None, start_date=None, end_
     else:
         df_kpi["Phone_Number"] = None
 
+    # --- Add Truck_Condition from logistic table ---
+    if "Truck_Condition" in df_logistic.columns and "Truck_Plate_Number" in df_logistic.columns:
+        # Ensure _Date exists
+        if "_Date" not in df_logistic.columns:
+            if "Timestamp" in df_logistic.columns:
+                df_logistic["Timestamp"] = pd.to_datetime(df_logistic["Timestamp"], errors="coerce")
+                df_logistic["_Date"] = df_logistic["Timestamp"].dt.date
+            else:
+                df_logistic["_Date"] = None
+        
+        if "Product_Group" in df_logistic.columns:
+            condition_map = (
+                df_logistic
+                .groupby(["Truck_Plate_Number", "Product_Group", "_Date"], dropna=False)["Truck_Condition"]
+                .first()
+                .reset_index()
+                .rename(columns={"_Date": "Date"})
+            )
+            
+            if "Date" not in df_kpi.columns:
+                df_kpi["Date"] = None
+            
+            df_kpi = df_kpi.merge(
+                condition_map,
+                on=["Truck_Plate_Number", "Product_Group", "Date"],
+                how="left"
+            )
+    
+    if "Truck_Condition" not in df_kpi.columns:
+        df_kpi["Truck_Condition"] = None
+
+    # --- Add Coming_to_Load_or_Unload from security table ---
+    if "Coming_to_Load_or_Unload" in df_security.columns and "Truck_Plate_Number" in df_security.columns:
+        coming_map = (
+            df_security.sort_values("Timestamp")
+            .groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"]
+            .last()
+            .reset_index()
+        )
+        df_kpi = df_kpi.merge(coming_map, on="Truck_Plate_Number", how="left")
+    else:
+        df_kpi["Coming_to_Load_or_Unload"] = None
+
     # Compute Loading_Rate (min/MT) safely
     def compute_rate(r):
         try:
@@ -190,6 +233,8 @@ def show_loading_durations_status(dfs, selected_date=None, start_date=None, end_
     display_cols = [
         "Date",
         "Product_Group",
+        "Coming_to_Load_or_Unload",
+        "Truck_Condition",
         "Truck_Plate_Number",
         "Arrival_Time",
         "Start_Loading_Time",
@@ -216,6 +261,10 @@ def show_loading_durations_status(dfs, selected_date=None, start_date=None, end_
             df_kpi[c] = pd.to_datetime(df_kpi[c], errors="coerce").dt.time.apply(lambda t: t.strftime("%H:%M:%S") if pd.notna(t) else None)
 
     st.subheader("Loading Durations Status")
+    
+    # Apply truck_condition filter if specified
+    if truck_condition and "Truck_Condition" in df_kpi.columns:
+        df_kpi = df_kpi[df_kpi["Truck_Condition"] == truck_condition]
     
     # Sort and prepare display
     df_view = df_kpi[display_cols].sort_values(["Product_Group", "Date", "Truck_Plate_Number"]).reset_index(drop=True)

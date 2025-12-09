@@ -121,6 +121,7 @@ df_kpi = compute_per_truck_metrics(
 # 1️⃣ STATUS SUMMARY
 show_status_summary(
     dfs['status'],
+    df_security=dfs['security'],
     product_filter=sb["product_selected"],
     upload_type=sb["upload_type"],
     start_date=sb["start_date"],
@@ -135,6 +136,7 @@ show_current_waiting(
     dfs['security'], dfs['status'], dfs['driver'], dfs.get('logistic'),
     product_filter=sb["product_selected"],
     upload_type=sb["upload_type"],
+    truck_condition=sb["truck_condition"],
     start_date=sb["start_date"],
     end_date=sb["end_date"]
 )
@@ -146,7 +148,8 @@ show_loading_durations_status(
     start_date=sb["start_date"],
     end_date=sb["end_date"],
     product_selected=sb["product_selected"],
-    upload_type=sb["upload_type"]
+    upload_type=sb["upload_type"],
+    truck_condition=sb["truck_condition"]
 )
 st.divider()
 

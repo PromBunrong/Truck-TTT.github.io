@@ -4,7 +4,7 @@ import pandas as pd
 from config.config import LOCAL_TZ
 
 
-def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, product_filter=None, upload_type=None, selected_date=None, start_date=None, end_date=None):
+def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, product_filter=None, upload_type=None, truck_condition=None, selected_date=None, start_date=None, end_date=None):
     """
     Show trucks currently waiting.
     A truck is considered waiting if:
@@ -126,6 +126,32 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
         # ensure column exists
         if "Total_Weight_MT" not in waiting.columns:
             waiting["Total_Weight_MT"] = None
+    
+    # --- Merge Truck_Condition from logistic (per Truck + Product + Date) ---
+    if df_logistic is not None and "Truck_Condition" in df_logistic.columns:
+        lf_cond = df_logistic.copy()
+        if "Timestamp" in lf_cond.columns:
+            lf_cond["Timestamp"] = pd.to_datetime(lf_cond["Timestamp"], errors="coerce")
+            lf_cond["_Date"] = lf_cond["Timestamp"].dt.date
+        else:
+            lf_cond["_Date"] = None
+
+        if "Product_Group" in lf_cond.columns and "Product_Group" in waiting.columns:
+            condition_map = (
+                lf_cond.groupby(["Truck_Plate_Number", "Product_Group", "_Date"], dropna=False)["Truck_Condition"]
+                .first()
+                .reset_index()
+                .rename(columns={"_Date": "Date"})
+            )
+            
+            waiting = waiting.merge(
+                condition_map,
+                on=["Truck_Plate_Number", "Product_Group", "Date"],
+                how="left"
+            )
+        
+        if "Truck_Condition" not in waiting.columns:
+            waiting["Truck_Condition"] = None
 
     # --- Apply Filters ---
     if product_filter:
@@ -133,6 +159,9 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
 
     if upload_type and "Coming_to_Load_or_Unload" in waiting.columns:
         waiting = waiting[waiting["Coming_to_Load_or_Unload"] == upload_type]
+    
+    if truck_condition and "Truck_Condition" in waiting.columns:
+        waiting = waiting[waiting["Truck_Condition"] == truck_condition]
 
     # --- Compute correct Waiting time ---
     waiting["Waiting_min"] = (now - waiting["Arrival_Time"]) / pd.Timedelta(minutes=1)
@@ -182,6 +211,7 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
         "Date",
         "Product_Group",
         "Coming_to_load_or_Unload",
+        "Truck_Condition",
         "Truck_Plate_Number",
         "Outbound_Delivery_No",
         "Total_Weight_MT",

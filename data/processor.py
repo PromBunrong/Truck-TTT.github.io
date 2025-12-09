@@ -59,7 +59,8 @@ LOGISTIC_RENAME = {
     "ប្រភេទទំនិញ": "Product_Group",
     "ស្លាកលេខឡាន": "Truck_Plate_Number",
     "Total Weight (MT) ": "Total_Weight_MT",
-    "Outbound Delivery Nº": "Outbound_Delivery_No"
+    "Outbound Delivery Nº": "Outbound_Delivery_No",
+    "Truck Condition": "Truck_Condition"
 }
 
 

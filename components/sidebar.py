@@ -86,6 +86,13 @@ def render_sidebar(default_date, refresh_interval_seconds):
     # Upload/Unload selector
     upload_type = st.sidebar.selectbox("Loading / Unloading", options=["All", "Loading", "Unloading"], index=0)
 
+    # Truck Condition selector
+    truck_condition = st.sidebar.selectbox(
+        "Truck Condition", 
+        options=["All", "OutSource Truck", "Company Truck", "Customer Truck"], 
+        index=0
+    )
+
     # Product groups (multi)
     product_options = ["Pipe", "Coil KMH1", "Coil KMH2", "Trading", "Roofing", "PU", "CZD", "BM", "Other"]
     product_selected = st.sidebar.multiselect("Product Group", options=product_options, default=product_options)
@@ -101,5 +108,6 @@ def render_sidebar(default_date, refresh_interval_seconds):
         "auto_refresh": auto_refresh,
         "manual_refresh": manual_refresh,
         "upload_type": None if upload_type == "All" else upload_type,
+        "truck_condition": None if truck_condition == "All" else truck_condition,
         "product_selected": product_selected
     }
