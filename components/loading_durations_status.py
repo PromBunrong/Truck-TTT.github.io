@@ -191,8 +191,6 @@ def show_loading_durations_status(dfs, selected_date=None, start_date=None, end_
         "Date",
         "Product_Group",
         "Truck_Plate_Number",
-        "Outbound_Delivery_No",
-        "Phone_Number",
         "Arrival_Time",
         "Start_Loading_Time",
         "Completed_Time",
@@ -201,6 +199,8 @@ def show_loading_durations_status(dfs, selected_date=None, start_date=None, end_
         "Total_Weight_MT",
         "Loading_Rate_min/MT",
         "Loading_Rate_MT/Hour",
+        "Outbound_Delivery_No",
+        "Phone_Number",
         "Mission",
         "Is_Valid_Order",
         "Order_Error"
