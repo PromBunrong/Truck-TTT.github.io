@@ -116,6 +116,11 @@ def show_status_summary(df_status, df_security=None, product_filter=None, upload
         if product_filter and "Product_Group" in df_log.columns:
             df_log = df_log[df_log["Product_Group"].isin(product_filter)]
         
+        # Calculate total planned weight from logistic sheet (before upload_type filter)
+        planned_weight_before_filter = 0
+        if "Total_Weight_MT" in df_log.columns:
+            planned_weight_before_filter = df_log["Total_Weight_MT"].sum()
+        
         # Apply Loading/Unloading filter by merging with security
         if upload_type and df_security is not None and not df_security.empty:
             if "Coming_to_Load_or_Unload" in df_security.columns and "Truck_Plate_Number" in df_security.columns:
@@ -130,9 +135,11 @@ def show_status_summary(df_status, df_security=None, product_filter=None, upload
                 df_log = df_log.merge(sec_map, on="Truck_Plate_Number", how="left")
                 df_log = df_log[df_log["Coming_to_Load_or_Unload"] == upload_type]
         
-        # Calculate total planned weight from logistic sheet
+        # Calculate total planned weight from logistic sheet (after all filters)
         if "Total_Weight_MT" in df_log.columns:
             planned_weight = df_log["Total_Weight_MT"].sum()
+        else:
+            planned_weight = 0
         
         # Find completed trucks from status (trucks with Completed_Time, same logic as Mission="Done")
         if not df_status.empty:
@@ -165,12 +172,14 @@ def show_status_summary(df_status, df_security=None, product_filter=None, upload
                 # Merge with logistic to get weights for completed truck+product combinations
                 if "Truck_Plate_Number" in df_log.columns and "Product_Group" in df_log.columns and not completed_pairs.empty:
                     df_log_with_completed = df_log.merge(completed_pairs, on=["Truck_Plate_Number", "Product_Group"], how="inner")
-                    completed_weight = df_log_with_completed["Total_Weight_MT"].sum()
+                    if "Total_Weight_MT" in df_log_with_completed.columns:
+                        completed_weight = df_log_with_completed["Total_Weight_MT"].sum()
             else:
                 # Fallback if no Product_Group
                 completed_trucks = df_completed["Truck_Plate_Number"].unique()
                 if "Truck_Plate_Number" in df_log.columns and len(completed_trucks) > 0:
-                    completed_weight = df_log[df_log["Truck_Plate_Number"].isin(completed_trucks)]["Total_Weight_MT"].sum()
+                    if "Total_Weight_MT" in df_log.columns:
+                        completed_weight = df_log[df_log["Truck_Plate_Number"].isin(completed_trucks)]["Total_Weight_MT"].sum()
     
     # Calculate completion percentage
     completion_pct = 0
@@ -230,7 +239,7 @@ def show_status_summary(df_status, df_security=None, product_filter=None, upload
             else:
                 df_log["_Date"] = None
             
-            if "Product_Group" in df_log.columns and "Truck_Plate_Number" in df_log.columns:
+            if "Product_Group" in df_log.columns and "Truck_Plate_Number" in df_log.columns and "Total_Weight_MT" in df_log.columns:
                 weight_map = (
                     df_log.groupby(["Truck_Plate_Number", "Product_Group", "_Date"], dropna=False)["Total_Weight_MT"]
                     .sum()
