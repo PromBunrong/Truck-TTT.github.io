@@ -58,7 +58,8 @@ STATUS_RENAME = {
 LOGISTIC_RENAME = {
     "ប្រភេទទំនិញ": "Product_Group",
     "ស្លាកលេខឡាន": "Truck_Plate_Number",
-    "Total Weight (MT) ": "Total_Weight_MT",
+    "Total Weight (MT)": "Total_Weight_MT",
+    "Total Weight (MT) ": "Total_Weight_MT",  # Keep old version with space for backward compatibility
     "Outbound Delivery Nº": "Outbound_Delivery_No",
     "Truck Condition": "Truck_Condition"
 }
