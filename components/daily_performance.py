@@ -51,23 +51,24 @@ def show_daily_performance(dfs, selected_date=None, start_date=None, end_date=No
     if "Product_Group" not in df_logistic.columns:
         df_logistic["Product_Group"] = None
 
-    # Correct weight mapping
-    weight_map = (
-        df_logistic.groupby(
-            ["Truck_Plate_Number", "Product_Group", "_Date"],
-            dropna=False
-        )["Total_Weight_MT"]
-        .sum()
-        .reset_index()
-        .rename(columns={"_Date": "Date"})
-    )
+    # Correct weight mapping - check if Total_Weight_MT exists
+    if "Total_Weight_MT" in df_logistic.columns:
+        weight_map = (
+            df_logistic.groupby(
+                ["Truck_Plate_Number", "Product_Group", "_Date"],
+                dropna=False
+            )["Total_Weight_MT"]
+            .sum()
+            .reset_index()
+            .rename(columns={"_Date": "Date"})
+        )
 
-    # Merge weight map into KPI
-    df_kpi = df_kpi.merge(
-        weight_map,
-        on=["Truck_Plate_Number", "Product_Group", "Date"],
-        how="left"
-    )
+        # Merge weight map into KPI
+        df_kpi = df_kpi.merge(
+            weight_map,
+            on=["Truck_Plate_Number", "Product_Group", "Date"],
+            how="left"
+        )
 
     # If weight missing → None
     if "Total_Weight_MT" not in df_kpi.columns:
