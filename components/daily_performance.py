@@ -75,70 +75,43 @@ def show_daily_performance(dfs, selected_date=None, start_date=None, end_date=No
         df_kpi["Total_Weight_MT"] = None
 
     # ---------------------------------------------------------------------
-    # --- Step 3: Attach Coming_to_Load_or_Unload from Security (date-aware) ---
-    # WORKAROUND: Security sheet has corrupted truck plates (0.00E+00, etc)
-    # Strategy: Use Status sheet truck plates and match by date to get the action from Security
+    # --- Step 3: Attach Coming_to_Load_or_Unload from Security (date-range based) ---
+    # Use simpler date-range filtering instead of complex timestamp matching
     # ---------------------------------------------------------------------
     
-    # First, try to build a mapping from Status truck plates to Security actions by matching on date
-    if "Coming_to_Load_or_Unload" in df_security.columns and "Timestamp" in df_security.columns and "Timestamp" in df_status.columns:
-        df_security = df_security.copy()
-        df_status_copy = df_status.copy()
+    if "Coming_to_Load_or_Unload" in df_security.columns and "Timestamp" in df_security.columns:
+        df_security_dated = df_security.copy()
+        df_security_dated["Timestamp"] = pd.to_datetime(df_security_dated["Timestamp"], errors="coerce")
+        df_security_dated["_Date"] = df_security_dated["Timestamp"].dt.date
         
-        # Parse timestamps and extract dates
-        df_security["Timestamp"] = pd.to_datetime(df_security["Timestamp"], errors="coerce")
-        df_security["_Date"] = df_security["Timestamp"].dt.date
-        df_status_copy["Timestamp"] = pd.to_datetime(df_status_copy["Timestamp"], errors="coerce")
-        df_status_copy["_Date"] = df_status_copy["Timestamp"].dt.date
+        # Filter security records to selected date range
+        if selected_date is not None:
+            sec_filtered = df_security_dated[df_security_dated["_Date"] == selected_date]
+        elif start_date is not None or end_date is not None:
+            if start_date and end_date:
+                sec_filtered = df_security_dated[(df_security_dated["_Date"] >= start_date) & (df_security_dated["_Date"] <= end_date)]
+            elif start_date:
+                sec_filtered = df_security_dated[df_security_dated["_Date"] >= start_date]
+            else:
+                sec_filtered = df_security_dated[df_security_dated["_Date"] <= end_date]
+        else:
+            sec_filtered = df_security_dated.copy()
         
-        # Get the earliest status event per truck per date (this tells us when they arrived)
-        if "Truck_Plate_Number" in df_status_copy.columns:
-            status_first = df_status_copy.sort_values("Timestamp").groupby(["Truck_Plate_Number", "_Date"]).agg({
-                "Timestamp": "first"
-            }).reset_index()
-            status_first = status_first.rename(columns={"Timestamp": "Status_First_Time"})
-            
-            # For each status entry, find the closest Security entry on that date (within 30 min window)
-            # and assume that's the gate entry
-            security_with_action = df_security[["_Date", "Timestamp", "Coming_to_Load_or_Unload"]].copy()
-            
-            truck_to_action = {}
-            match_stats = {"total": 0, "matched": 0, "no_security": 0, "no_action": 0, "too_far": 0}
-            
-            for _, row in status_first.iterrows():
-                truck = row["Truck_Plate_Number"]
-                date = row["_Date"]
-                status_time = row["Status_First_Time"]
-                match_stats["total"] += 1
-                
-                # Find security entries on that date within +/- 60 minutes of first status (increased from 30)
-                sec_on_date = security_with_action[security_with_action["_Date"] == date].copy()
-                if not sec_on_date.empty and pd.notna(status_time):
-                    sec_on_date["time_diff"] = (sec_on_date["Timestamp"] - status_time).abs()
-                    closest = sec_on_date.nsmallest(1, "time_diff")
-                    if not closest.empty:
-                        time_diff = closest.iloc[0]["time_diff"]
-                        if time_diff <= pd.Timedelta(minutes=60):
-                            action = closest.iloc[0]["Coming_to_Load_or_Unload"]
-                            if pd.notna(action):
-                                truck_to_action[(truck, date)] = action
-                                match_stats["matched"] += 1
-                            else:
-                                match_stats["no_action"] += 1
-                        else:
-                            match_stats["too_far"] += 1
-                else:
-                    match_stats["no_security"] += 1
-            
-            # Apply this mapping to df_kpi
-            def get_action(row):
-                truck = row.get("Truck_Plate_Number")
-                date = row.get("Date")
-                return truck_to_action.get((truck, date), None)
-            
-            df_kpi["Coming_to_Load_or_Unload"] = df_kpi.apply(get_action, axis=1)
+        # Get first Coming_to_Load_or_Unload per truck+date within date range
+        if not sec_filtered.empty and "Truck_Plate_Number" in sec_filtered.columns:
+            sec_map = (
+                sec_filtered.sort_values("Timestamp")
+                .groupby(["Truck_Plate_Number", "_Date"])["Coming_to_Load_or_Unload"]
+                .first()
+                .reset_index()
+                .rename(columns={"_Date": "Date"})
+            )
+            df_kpi = df_kpi.merge(sec_map, on=["Truck_Plate_Number", "Date"], how="left")
         else:
             df_kpi["Coming_to_Load_or_Unload"] = None
+        
+        # Replace NaN with alert message
+        df_kpi["Coming_to_Load_or_Unload"] = df_kpi["Coming_to_Load_or_Unload"].fillna("⚠️ NO SECURITY RECORD")
     else:
         df_kpi["Coming_to_Load_or_Unload"] = None
 

@@ -83,15 +83,42 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
     # Rename timestamp for clarity
     waiting = waiting.rename(columns={"Timestamp": "Arrival_Time"})
 
-    # --- Merge Coming_to_Upload_or_Unload from Security ---
+    # --- Merge Coming_to_Upload_or_Unload from Security (DATE RANGE ONLY) ---
     if "Coming_to_Load_or_Unload" in df_security.columns:
-        sec_map = (
-            df_security.sort_values("Timestamp")
-            .groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"]
-            .last()
-            .reset_index()
-        )
-        waiting = waiting.merge(sec_map, on="Truck_Plate_Number", how="left")
+        # Parse timestamp and extract date
+        df_security_dated = df_security.copy()
+        df_security_dated["Timestamp"] = pd.to_datetime(df_security_dated["Timestamp"], errors="coerce")
+        df_security_dated["_Date"] = df_security_dated["Timestamp"].dt.date
+        
+        # Filter security records to selected date range
+        if selected_date:
+            sec_filtered = df_security_dated[df_security_dated["_Date"] == selected_date]
+        elif start_date or end_date:
+            if start_date and end_date:
+                sec_filtered = df_security_dated[(df_security_dated["_Date"] >= start_date) & (df_security_dated["_Date"] <= end_date)]
+            elif start_date:
+                sec_filtered = df_security_dated[df_security_dated["_Date"] >= start_date]
+            else:
+                sec_filtered = df_security_dated[df_security_dated["_Date"] <= end_date]
+        else:
+            # No date filter - use today
+            today = pd.Timestamp.now(tz="Asia/Phnom_Penh").date()
+            sec_filtered = df_security_dated[df_security_dated["_Date"] == today]
+        
+        # Get first Coming_to_Load_or_Unload per truck within date range
+        if not sec_filtered.empty:
+            sec_map = (
+                sec_filtered.sort_values("Timestamp")
+                .groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"]
+                .first()
+                .reset_index()
+            )
+            waiting = waiting.merge(sec_map, on="Truck_Plate_Number", how="left")
+        else:
+            waiting["Coming_to_Load_or_Unload"] = None
+        
+        # Replace NaN with None (will display as empty in table)
+        waiting["Coming_to_Load_or_Unload"] = waiting["Coming_to_Load_or_Unload"].fillna("None")
 
     # --- Merge Driver Info (latest record per truck) ---
     if "Truck_Plate_Number" in df_driver.columns:

@@ -14,6 +14,7 @@ from components.status_summary import show_status_summary
 from components.current_waiting import show_current_waiting
 from components.loading_durations_status import show_loading_durations_status
 from components.daily_performance import show_daily_performance
+from components.total_turnaround_performance import show_total_turnaround_performance
 from components.styles import inject_styles
 
 
@@ -160,6 +161,18 @@ show_daily_performance(
     end_date=sb["end_date"],
     product_selected=sb["product_selected"],
     upload_type=sb["upload_type"]
+)
+st.divider()
+
+# 5️⃣ TOTAL TURNAROUND PERFORMANCE BY TRUCK
+show_total_turnaround_performance(
+    dfs,
+    df_kpi=df_kpi,
+    start_date=sb["start_date"],
+    end_date=sb["end_date"],
+    product_selected=sb["product_selected"],
+    upload_type=sb["upload_type"],
+    truck_condition=sb["truck_condition"]
 )
 
 # ----------------------------------------------------

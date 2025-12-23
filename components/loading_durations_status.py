@@ -181,15 +181,40 @@ def show_loading_durations_status(dfs, selected_date=None, start_date=None, end_
     if "Truck_Condition" not in df_kpi.columns:
         df_kpi["Truck_Condition"] = None
 
-    # --- Add Coming_to_Load_or_Unload from security table ---
+    # --- Add Coming_to_Load_or_Unload from security table (DATE RANGE ONLY) ---
     if "Coming_to_Load_or_Unload" in df_security.columns and "Truck_Plate_Number" in df_security.columns:
-        coming_map = (
-            df_security.sort_values("Timestamp")
-            .groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"]
-            .last()
-            .reset_index()
-        )
-        df_kpi = df_kpi.merge(coming_map, on="Truck_Plate_Number", how="left")
+        # Parse timestamp and extract date
+        df_security_dated = df_security.copy()
+        df_security_dated["Timestamp"] = pd.to_datetime(df_security_dated["Timestamp"], errors="coerce")
+        df_security_dated["_Date"] = df_security_dated["Timestamp"].dt.date
+        
+        # Filter security records to selected date range
+        if selected_date is not None:
+            sec_filtered = df_security_dated[df_security_dated["_Date"] == selected_date]
+        elif start_date is not None or end_date is not None:
+            if start_date and end_date:
+                sec_filtered = df_security_dated[(df_security_dated["_Date"] >= start_date) & (df_security_dated["_Date"] <= end_date)]
+            elif start_date:
+                sec_filtered = df_security_dated[df_security_dated["_Date"] >= start_date]
+            else:
+                sec_filtered = df_security_dated[df_security_dated["_Date"] <= end_date]
+        else:
+            sec_filtered = df_security_dated.copy()
+        
+        # Get first Coming_to_Load_or_Unload per truck within date range
+        if not sec_filtered.empty:
+            coming_map = (
+                sec_filtered.sort_values("Timestamp")
+                .groupby("Truck_Plate_Number")["Coming_to_Load_or_Unload"]
+                .first()
+                .reset_index()
+            )
+            df_kpi = df_kpi.merge(coming_map, on="Truck_Plate_Number", how="left")
+        else:
+            df_kpi["Coming_to_Load_or_Unload"] = None
+        
+        # Replace NaN with alert message
+        df_kpi["Coming_to_Load_or_Unload"] = df_kpi["Coming_to_Load_or_Unload"].fillna("⚠️ NO SECURITY RECORD")
     else:
         df_kpi["Coming_to_Load_or_Unload"] = None
 
@@ -294,14 +319,23 @@ def show_loading_durations_status(dfs, selected_date=None, start_date=None, end_
     if has_errors and "Order_Error" in df_view.columns:
         df_display.insert(0, "⚠️ Error", df_view["Order_Error"].fillna(""))
     
-    # Apply styling for invalid rows using the original df_view with validation columns
+    # Apply styling for invalid rows and highlight NO SECURITY RECORD
     def highlight_invalid_rows(row):
         # Get the corresponding validation status from df_view
         idx = row.name
+        styles = [''] * len(row)
+        
         if idx < len(df_view) and "Is_Valid_Order" in df_view.columns:
             if df_view.loc[idx, "Is_Valid_Order"] == False:
-                return ['background-color: #ffcccc; font-weight: bold;'] * len(row)  # Red background and bold text
-        return [''] * len(row)
+                styles = ['background-color: #ffcccc; font-weight: bold;'] * len(row)  # Red background for validation errors
+        
+        # Highlight NO SECURITY RECORD cells in orange
+        if "Coming_to_Load_or_Unload" in df_display.columns:
+            col_idx = df_display.columns.get_loc("Coming_to_Load_or_Unload")
+            if row.iloc[col_idx] == "⚠️ NO SECURITY RECORD":
+                styles[col_idx] = 'background-color: #fff3cd; font-weight: bold; color: #856404;'  # Yellow/orange warning
+        
+        return styles
     
     n_rows = len(df_display)
     
