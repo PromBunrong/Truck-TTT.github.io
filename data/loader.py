@@ -6,12 +6,12 @@ import streamlit as st
 def _sheet_csv_url(gid: str):
     return f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={gid}"
 
-@st.cache_data(ttl=15)  # cache for 15 seconds (adjust)
+@st.cache_data(ttl=60)  # cache for 60 seconds (1 minute)
 def load_sheet_by_gid(gid: str):
     url = _sheet_csv_url(gid)
     return pd.read_csv(url)
 
-@st.cache_data(ttl=15)
+@st.cache_data(ttl=60)
 def load_all_sheets():
     # Force truck plate columns to be read as string to avoid numeric conversion
     # (e.g., "3A-1111" → "0.00E+00" in Excel/GoogleSheets)
@@ -20,10 +20,26 @@ def load_all_sheets():
     status_url = _sheet_csv_url(SHEET_GIDS['status'])
     logistic_url = _sheet_csv_url(SHEET_GIDS['logistic'])
     
-    df_security = pd.read_csv(security_url, dtype=str, keep_default_na=False)
-    df_driver = pd.read_csv(driver_url, dtype=str, keep_default_na=False)
-    df_status = pd.read_csv(status_url, dtype=str, keep_default_na=False)
-    df_logistic = pd.read_csv(logistic_url, dtype=str, keep_default_na=False)
+    try:
+        df_security = pd.read_csv(security_url, dtype=str, keep_default_na=False)
+        df_driver = pd.read_csv(driver_url, dtype=str, keep_default_na=False)
+        df_status = pd.read_csv(status_url, dtype=str, keep_default_na=False)
+        df_logistic = pd.read_csv(logistic_url, dtype=str, keep_default_na=False)
+    except Exception as e:
+        st.error(f"""
+        ❌ **Failed to load Google Sheets data**
+        
+        Error: {str(e)}
+        
+        **To fix this:**
+        1. Open your Google Sheet
+        2. Click "Share" (top right)
+        3. Change to "Anyone with the link" → Viewer
+        4. Copy the share link and verify it contains the same spreadsheet ID
+        
+        Current Spreadsheet ID: `{SPREADSHEET_ID}`
+        """)
+        raise
     
     # Replace empty strings with NaN for proper handling
     for df in [df_security, df_driver, df_status, df_logistic]:

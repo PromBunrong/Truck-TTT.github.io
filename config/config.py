@@ -16,7 +16,7 @@ SHEET_GIDS = {
     'logistic': "1027892338"
 }
 
-REFRESH_INTERVAL_SECONDS = 30
+REFRESH_INTERVAL_SECONDS = 60
 
 # Timezone auto-switch
 if ENVIRONMENT == "local":

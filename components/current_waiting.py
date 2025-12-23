@@ -50,6 +50,13 @@ def show_current_waiting(df_security, df_status, df_driver, df_logistic=None, pr
         return
 
     # --- CLEANUP: Get latest status per truck+product within the filtered date range ---
+    # Check required columns exist before grouping
+    if "Truck_Plate_Number" not in status_filtered.columns:
+        st.subheader("Current Waiting Trucks")
+        st.error("Data error: 'Truck_Plate_Number' column missing from status data.")
+        st.write("Available columns:", list(status_filtered.columns))
+        return
+
     if "Product_Group" in status_filtered.columns:
         latest_today = (
             status_filtered.sort_values("Timestamp")

@@ -34,6 +34,21 @@ def normalize_khmer_text(x):
     return x
 
 
+def normalize_column_name(x: str) -> str:
+    """
+    Normalize incoming sheet column names to improve rename robustness:
+    - strip leading/trailing whitespace
+    - remove zero-width spaces / variation selectors
+    - collapse internal whitespace
+    """
+    if not isinstance(x, str):
+        return x
+    x = x.strip()
+    x = re.sub(r"[\u200B-\u200D\uFE00-\uFE0F]", "", x)
+    x = re.sub(r"\s+", " ", x)
+    return x
+
+
 # ---------------- RENAME MAPS ----------------
 SECURITY_RENAME = {
     "ស្លាកលេខឡាន": "Truck_Plate_Number",
@@ -114,11 +129,28 @@ def clean_sheet_dfs(dfs: dict):
       - Use original timezone logic (no changes)
     """
 
-    # Copy & rename
-    df_security = dfs['security'].rename(columns=SECURITY_RENAME)
-    df_driver = dfs['driver'].rename(columns=DRIVER_RENAME)
-    df_status = dfs['status'].rename(columns=STATUS_RENAME)
-    df_logistic = dfs['logistic'].rename(columns=LOGISTIC_RENAME)
+    # Copy first
+    df_security = dfs['security'].copy()
+    df_driver = dfs['driver'].copy()
+    df_status = dfs['status'].copy()
+    df_logistic = dfs['logistic'].copy()
+
+    # Normalize incoming column names for robustness
+    for df in (df_security, df_driver, df_status, df_logistic):
+        try:
+            df.columns = [normalize_column_name(c) for c in df.columns]
+        except Exception:
+            pass
+
+    # Build normalized rename maps (normalize keys only)
+    def _normalized_map(m):
+        return {normalize_column_name(k): v for k, v in m.items()}
+
+    # Rename after normalization
+    df_security = df_security.rename(columns=_normalized_map(SECURITY_RENAME))
+    df_driver = df_driver.rename(columns=_normalized_map(DRIVER_RENAME))
+    df_status = df_status.rename(columns=_normalized_map(STATUS_RENAME))
+    df_logistic = df_logistic.rename(columns=_normalized_map(LOGISTIC_RENAME))
 
     # -------------------------------
     # Normalize truck plate numbers

@@ -79,26 +79,46 @@ def compute_per_truck_metrics(
     # Arrival: For multi-product visits, get arrival per TRUCK+PRODUCT (not just per truck)
     # This allows each product group to have its own arrival timestamp
     arrival_all = status_for_date[status_for_date["Status"] == "Arrival"].copy()
-    if not arrival_all.empty and "Product_Group" in arrival_all.columns:
+    if not arrival_all.empty and {"Truck_Plate_Number", "Product_Group"}.issubset(arrival_all.columns):
         # Group by Truck + Product to get earliest arrival per product
-        arrival_prod = arrival_all.groupby(["Truck_Plate_Number", "Product_Group"])["Timestamp"].agg(_safe_min).rename("Arrival_Time").reset_index()
-    else:
-        # Fallback: arrival per truck only if no product info
-        arrival_prod = status_for_date[status_for_date["Status"] == "Arrival"].groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_min).rename("Arrival_Time").reset_index()
+        arrival_prod = (
+            arrival_all.groupby(["Truck_Plate_Number", "Product_Group"])["Timestamp"]
+            .agg(_safe_min)
+            .rename("Arrival_Time")
+            .reset_index()
+        )
+    elif not status_for_date.empty and "Truck_Plate_Number" in status_for_date.columns:
+        # Fallback: arrival per truck only if no product info or missing Product_Group
+        arrival_prod = (
+            status_for_date[status_for_date["Status"] == "Arrival"]
+            .groupby("Truck_Plate_Number")["Timestamp"].agg(_safe_min)
+            .rename("Arrival_Time").reset_index()
+        )
         if not arrival_prod.empty:
             arrival_prod["Product_Group"] = None
+    else:
+        arrival_prod = pd.DataFrame(columns=["Truck_Plate_Number", "Product_Group", "Arrival_Time"]) 
 
     # Start loading: earliest Start_Loading event on that date PER TRUCK+PRODUCT
     start_loading_prod = status_for_date[status_for_date["Status"] == "Start_Loading"].copy()
-    if not start_loading_prod.empty and "Product_Group" in start_loading_prod.columns:
-        start_loading_prod = start_loading_prod.groupby(["Truck_Plate_Number", "Product_Group"])["Timestamp"].agg(_safe_min).rename("Start_Loading_Time").reset_index()
+    if not start_loading_prod.empty and {"Truck_Plate_Number", "Product_Group"}.issubset(start_loading_prod.columns):
+        start_loading_prod = (
+            start_loading_prod.groupby(["Truck_Plate_Number", "Product_Group"])["Timestamp"]
+            .agg(_safe_min)
+            .rename("Start_Loading_Time")
+            .reset_index()
+        )
     else:
         start_loading_prod = pd.DataFrame(columns=["Truck_Plate_Number", "Product_Group", "Start_Loading_Time"]) 
 
     # Completed events on that date (keep list) PER TRUCK+PRODUCT
     completed_all = status_for_date[status_for_date["Status"] == "Completed"].copy()
-    if not completed_all.empty and "Product_Group" in completed_all.columns:
-        completed_grouped = completed_all.groupby(["Truck_Plate_Number", "Product_Group"])["Timestamp"].apply(lambda s: sorted(s.dropna().tolist())).to_dict()
+    if not completed_all.empty and {"Truck_Plate_Number", "Product_Group"}.issubset(completed_all.columns):
+        completed_grouped = (
+            completed_all.groupby(["Truck_Plate_Number", "Product_Group"])["Timestamp"]
+            .apply(lambda s: sorted(s.dropna().tolist()))
+            .to_dict()
+        )
     else:
         # fallback to empty dict
         completed_grouped = {}
@@ -335,16 +355,48 @@ def compute_per_truck_metrics(
 
     # Apply filters:
     #  - Filter by date: single date or date range (if provided)
+    import datetime as _dt
+
+    def _to_date_scalar(x):
+        if x is None:
+            return None
+        if isinstance(x, pd.Timestamp):
+            try:
+                if x.tz is not None:
+                    x = x.tz_convert(LOCAL_TZ)
+            except Exception:
+                pass
+            return x.date()
+        if isinstance(x, _dt.datetime):
+            return x.date()
+        if isinstance(x, _dt.date):
+            return x
+        try:
+            y = pd.to_datetime(x, errors="coerce")
+            if pd.isna(y):
+                return None
+            return y.date()
+        except Exception:
+            return None
+
     if selected_date is not None:
-        kpi = kpi[pd.to_datetime(kpi["Date"]).dt.date == selected_date]
+        sel_date = _to_date_scalar(selected_date)
+        kpi_dates_dt = pd.to_datetime(kpi["Date"], errors="coerce").dt.normalize()
+        sel_ts = pd.Timestamp(sel_date) if sel_date is not None else None
+        if sel_ts is not None:
+            kpi = kpi[kpi_dates_dt == sel_ts]
     elif start_date is not None or end_date is not None:
-        kpi_dates = pd.to_datetime(kpi["Date"]).dt.date
-        if start_date is not None and end_date is not None:
-            kpi = kpi[(kpi_dates >= start_date) & (kpi_dates <= end_date)]
-        elif start_date is not None:
-            kpi = kpi[kpi_dates >= start_date]
-        elif end_date is not None:
-            kpi = kpi[kpi_dates <= end_date]
+        s_date = _to_date_scalar(start_date)
+        e_date = _to_date_scalar(end_date)
+        kpi_dates_dt = pd.to_datetime(kpi["Date"], errors="coerce").dt.normalize()
+        s_ts = pd.Timestamp(s_date) if s_date is not None else None
+        e_ts = pd.Timestamp(e_date) if e_date is not None else None
+        if s_ts is not None and e_ts is not None:
+            kpi = kpi[(kpi_dates_dt >= s_ts) & (kpi_dates_dt <= e_ts)]
+        elif s_ts is not None:
+            kpi = kpi[kpi_dates_dt >= s_ts]
+        elif e_ts is not None:
+            kpi = kpi[kpi_dates_dt <= e_ts]
 
     # product filter
     if product_filter:
